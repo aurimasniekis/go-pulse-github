@@ -88,7 +88,17 @@ func (t *Tx) ObservationExists(ctx context.Context, dedupKey string) (bool, erro
 
 // InsertPublication queues a publication. It reports false when the (observation, account) pair is already queued.
 func (t *Tx) InsertPublication(ctx context.Context, p Publication, now time.Time) (bool, error) {
-	res, err := t.exec(ctx, `INSERT INTO outbox (publication_id, observation_id, account_key, subject, ce_type, ce_time,
+	// The route outlives the outbox row: once an observation was queued for an account it is never queued for that
+	// account again, even after the published row was swept.
+	res, err := t.exec(ctx, `INSERT INTO observation_routes (observation_id, account_key) VALUES (?, ?)
+		ON CONFLICT DO NOTHING`, p.ObservationID, p.AccountKey)
+	if err != nil {
+		return false, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return false, nil
+	}
+	res, err = t.exec(ctx, `INSERT INTO outbox (publication_id, observation_id, account_key, subject, ce_type, ce_time,
 		time_basis, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
 		p.PublicationID, p.ObservationID, p.AccountKey, p.Subject, p.CEType, p.CETime.UnixNano(), p.TimeBasis, p.Payload, ms(now))
 	if err != nil {

@@ -22,7 +22,7 @@ func TestMigrationsAndPragmas(t *testing.T) {
 	db := open(t)
 	ctx := context.Background()
 	v, err := db.SchemaVersion(ctx)
-	if err != nil || v != "0001_init" {
+	if err != nil || v != "0002_observation_routes" {
 		t.Fatalf("schema %q %v", v, err)
 	}
 	var mode string
@@ -145,6 +145,26 @@ func TestObservationSharedAcrossAccounts(t *testing.T) {
 	rows, _ := db.OutboxByObservation(context.Background(), "o1")
 	if len(rows) != 2 || rows[0].PublicationID == rows[1].PublicationID {
 		t.Fatalf("want one publication per account, got %d", len(rows))
+	}
+}
+
+// Published outbox rows are swept after 7 days but observations are kept for 35. Re-reading an item in between (a
+// new activity feed reads 30 days back) must not queue it for the same account again; a new account still gets it.
+func TestRouteOutlivesSweptPublication(t *testing.T) {
+	db := open(t)
+	ctx := context.Background()
+	queue(t, db, "o1", "a")
+	head, _ := db.HeadOfPartition(ctx, "a")
+	_ = db.MarkPublished(ctx, head.Seq, 1, false, time.Now().Add(-10*24*time.Hour))
+	if r, err := db.Sweep(ctx, time.Now(), RetentionPolicy{Published: 7 * 24 * time.Hour, InboxProcessed: time.Hour,
+		Observations: 35 * 24 * time.Hour}); err != nil || r.Outbox != 1 {
+		t.Fatalf("sweep %+v %v", r, err)
+	}
+	queue(t, db, "o1", "a")
+	queue(t, db, "o1", "b")
+	rows, _ := db.OutboxByObservation(ctx, "o1")
+	if len(rows) != 1 || rows[0].AccountKey != "b" {
+		t.Fatalf("want only the new account queued, got %+v", rows)
 	}
 }
 

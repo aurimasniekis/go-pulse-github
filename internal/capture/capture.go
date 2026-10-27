@@ -28,8 +28,10 @@ type Result struct {
 	NewPublications int
 }
 
-// Store inserts the observation (or reuses it when its dedup key exists) and queues one publication per target.
-// Re-storing the same draft is a no-op, which makes collector retries safe.
+// Store inserts the observation (or reuses it when its dedup key exists) and queues one publication per target that
+// has not received this observation before. Re-storing the same draft is a no-op for as long as the observation is
+// kept, which makes collector retries and re-reads safe; a new target (for example a second account's feed seeing
+// the same event) still gets its publication.
 func (c *Capturer) Store(ctx context.Context, tx *storage.Tx, d *events.Draft, targets []routing.Target, inboxID int64) (Result, error) {
 	now := c.Now()
 	obs := storage.Observation{
