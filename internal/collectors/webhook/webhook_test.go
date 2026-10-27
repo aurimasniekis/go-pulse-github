@@ -3,6 +3,7 @@ package webhook
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -296,6 +297,42 @@ func TestProcessInstallationLifecycle(t *testing.T) {
 	rows, _ := w.db.OutboxRows(ctx, storage.OutboxPending, 10)
 	if len(rows) != 3 || rows[2].Subject != "evt.github.example-org.webhook.installation.deleted" {
 		t.Fatalf("lifecycle events are published too: %d", len(rows))
+	}
+}
+
+// installation_target carries the new login only in the top-level account object. The rename must reach the stored
+// installation, the account record and the payload's account.login, while the routing key and subjects stay put.
+func TestProcessAccountRename(t *testing.T) {
+	w := newWorld(t)
+	ctx := context.Background()
+	created := []byte(`{"action":"created","installation":{"id":888,"app_id":1,"account":{"id":7001,"login":"example-org","type":"Organization"}},
+		"repositories":[]}`)
+	renamed := []byte(`{"action":"renamed","account":{"id":7001,"login":"example-corp","type":"Organization"},
+		"changes":{"login":{"from":"example-org"}},"installation":{"id":888,"node_id":"MDIz"},"target_type":"Organization"}`)
+	issue := []byte(`{"action":"opened","installation":{"id":888},"issue":{"id":1,"number":1,"created_at":"2026-10-27T11:00:00Z"},
+		"repository":{"id":9,"full_name":"example-corp/tool","owner":{"id":7001,"login":"example-corp","type":"Organization"}},
+		"sender":{"id":1,"login":"octocat","type":"User"}}`)
+	w.post(t, "installation", "r1", created, nil)
+	w.post(t, "installation_target", "r2", renamed, nil)
+	w.post(t, "issues", "r3", issue, nil)
+	if _, err := w.proc.ProcessDue(ctx, 50); err != nil {
+		t.Fatal(err)
+	}
+	if in, _ := w.db.Installation(ctx, 888); in == nil || in.AccountLogin != "example-corp" {
+		t.Fatalf("stored installation %+v", in)
+	}
+	recs, _ := w.db.Accounts(ctx)
+	if len(recs) != 1 || recs[0].Login != "example-corp" {
+		t.Fatalf("account record %+v", recs)
+	}
+	rows, _ := w.db.OutboxRows(ctx, storage.OutboxPending, 10)
+	last := rows[len(rows)-1]
+	var p struct {
+		Account struct{ Key, Login string } `json:"account"`
+	}
+	_ = json.Unmarshal(last.Payload, &p)
+	if last.Subject != "evt.github.example-org.webhook.issues.opened" || p.Account.Key != "example-org" || p.Account.Login != "example-corp" {
+		t.Fatalf("after rename: %s %+v", last.Subject, p.Account)
 	}
 }
 

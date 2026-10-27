@@ -162,6 +162,16 @@ func (p *Processor) handle(ctx context.Context, row *storage.InboxRow, log *slog
 			return &failure{class: "installation_lookup", err: err}
 		}
 	}
+	// installation_target (account renamed) carries the new login in the top-level account object only; the
+	// installation object has just its ID. Apply it to the stored installation before routing.
+	if life != nil && life.renamed != nil && inst != nil && inst.AccountGitHubID == life.renamed.ID && life.renamed.Login != "" {
+		renamed := *inst
+		renamed.AccountLogin = life.renamed.Login
+		inst = &renamed
+		if life.inst == nil {
+			life.inst = &renamed
+		}
+	}
 	var key string
 	reason := ""
 	switch {
@@ -259,6 +269,16 @@ func (p *Processor) installation(ctx context.Context, id int64, life *lifecycleC
 // accountFor maps an installation's account to a configured account, pinning the GitHub ID on first sight.
 func (p *Processor) accountFor(ctx context.Context, inst *storage.Installation, log *slog.Logger) string {
 	if key, ok := p.Router.AccountForGitHubID(inst.AccountGitHubID); ok {
+		// The account ID is immutable; a different login means the account was renamed on GitHub.
+		if inst.AccountLogin != "" && p.Router.Ref(key).Login != inst.AccountLogin {
+			if p.OnAccountBound != nil {
+				if err := p.OnAccountBound(ctx, key, inst.AccountGitHubID, inst.AccountLogin, inst.AccountType); err != nil {
+					log.Error("could not record account rename", observability.FieldAccount, key, observability.Err(err))
+					return key
+				}
+			}
+			p.Router.Bind(key, inst.AccountGitHubID, inst.AccountLogin)
+		}
 		return key
 	}
 	key, ok := p.Router.UnboundAccountForLogin(inst.AccountLogin)
@@ -280,6 +300,7 @@ func (p *Processor) accountFor(ctx context.Context, inst *storage.Installation, 
 // lifecycleChange is an installation or repository-access change carried by a webhook.
 type lifecycleChange struct {
 	inst        *storage.Installation
+	renamed     *ghAccount
 	status      string
 	reposAdd    []storage.InstallationRepo
 	reposRemove []storage.InstallationRepo
@@ -374,6 +395,7 @@ func lifecycle(event, action string, body []byte) (*lifecycleChange, error) {
 		c.reposRemove = repoRefs(p.Installation.ID, p.RepositoriesRemoved, storage.InstallRemoved)
 	case "installation_target":
 		// Account renamed: the payload's account carries the new login; the immutable ID keeps routing stable.
+		c.renamed = p.Account
 		if p.Account != nil && c.inst != nil {
 			c.inst.AccountGitHubID, c.inst.AccountLogin, c.inst.AccountType = p.Account.ID, p.Account.Login, p.Account.Type
 		}

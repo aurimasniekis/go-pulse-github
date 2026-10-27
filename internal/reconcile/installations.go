@@ -156,6 +156,11 @@ func statusAction(prev *storage.Installation, status string) string {
 
 func (r *Installations) accountFor(ctx context.Context, in *storage.Installation) string {
 	if key, ok := r.Router.AccountForGitHubID(in.AccountGitHubID); ok {
+		// The account ID is immutable; a different login means the account was renamed on GitHub.
+		if in.AccountLogin != "" && r.Router.Ref(key).Login != in.AccountLogin &&
+			(r.Bind == nil || r.Bind(ctx, key, in.AccountGitHubID, in.AccountLogin, in.AccountType) == nil) {
+			r.Router.Bind(key, in.AccountGitHubID, in.AccountLogin)
+		}
 		return key
 	}
 	key, ok := r.Router.UnboundAccountForLogin(in.AccountLogin)

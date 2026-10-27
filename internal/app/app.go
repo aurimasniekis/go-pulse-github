@@ -205,7 +205,12 @@ func (s *Service) syncAccounts(ctx context.Context) error {
 	for _, key := range s.Router.Keys() {
 		a, _ := s.Router.Account(key)
 		ref := s.Router.Ref(key)
-		if _, err := s.DB.SyncAccount(ctx, storage.AccountRecord{Key: key, GitHubID: ref.GitHubID, Login: a.Login,
+		// A login learned from GitHub (after a rename) wins over the configured one, which may be stale.
+		login := ref.Login
+		if login == "" {
+			login = a.Login
+		}
+		if _, err := s.DB.SyncAccount(ctx, storage.AccountRecord{Key: key, GitHubID: ref.GitHubID, Login: login,
 			Type: string(a.Type)}, s.Now()); err != nil {
 			return err
 		}
