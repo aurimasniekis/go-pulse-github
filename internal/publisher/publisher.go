@@ -182,7 +182,7 @@ const (
 	// ClassRejected is a JetStream API error for this message: the server answered and refused it. It is retried,
 	// and quarantined after outbox.poison_attempts so it cannot block its account's partition forever.
 	ClassRejected = "publish_rejected"
-	ClassOther           = "publish_error"
+	ClassOther    = "publish_error"
 )
 
 // jsMessageTooLarge is the JetStream API error code for a message above the stream's max_msg_size.
