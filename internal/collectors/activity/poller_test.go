@@ -169,6 +169,30 @@ func TestPollOverlapAndConditional(t *testing.T) {
 	}
 }
 
+// The Events API can show an event after a newer one was already read. Its lower ID must not hide it: the poller reads
+// an overlap past the newest known event and deduplicates what it already has.
+func TestPollCollectsLateVisibleEvents(t *testing.T) {
+	w := newWorld(t)
+	ctx := context.Background()
+	f := &feed{}
+	w.gh.Handle("GET /users/alice/received_events", f.serve)
+	p := w.poller(0)
+	f.set(103, 102, 101)
+	if _, err := p.PollFeed(ctx, p.Feeds[0]); err != nil {
+		t.Fatal(err)
+	}
+	f.set(105, 103, 99, 102, 101) // 99 became visible only now
+	if _, err := p.PollFeed(ctx, p.Feeds[0]); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.subjects(t, "alice"); len(got) != 5 {
+		t.Fatalf("want 103, 102, 101, then 105 and the late 99: %v", got)
+	}
+	if n, _ := w.db.GapCount(ctx, time.Time{}); n != 0 {
+		t.Fatalf("gaps %d", n)
+	}
+}
+
 // When the newest known event has fallen out of the bounded feed, a gap is published with its time window.
 func TestPollGapDetection(t *testing.T) {
 	w := newWorld(t)

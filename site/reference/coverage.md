@@ -116,6 +116,8 @@ possible future extension.
   was removed from PR, review, issue and comment events. Push events are tagged with the qualifier
   `push_without_commit_list`.
 - **Not an audit trail:** visibility depends on the endpoint and token, and private interactions may be missing.
+- **Overlap:** each poll pages until it reaches the newest event ID already stored, then reads 10 more known events
+  (within the page budget), because an event can become visible after a newer one; duplicates are dropped by event ID.
 - **Gap detection:** each poll pages until it reaches the newest event ID already stored. If that event is no longer
   reachable (more than 300 newer events, older than 30 days, or the page budget ran out), a
   `collector.coverage.gap_detected` event is published with the time window. After downtime longer than 30 days the

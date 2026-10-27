@@ -3,8 +3,9 @@
 //
 // The Events API is a bounded, supplementary feed: at most 300 events, only the last 30 days, with latency from
 // 30 seconds up to 6 hours, and PushEvent payloads without commit lists. It is not an audit trail. The poller stores
-// GitHub event IDs, re-reads with overlap (it pages until it reaches the newest event it already has), and reports a
-// coverage gap whenever that event is no longer reachable.
+// GitHub event IDs and pages until it reaches the newest event it already has, then keeps reading an overlap of known
+// events: an event can become visible after a newer one was already read, so a lower ID is not proof it was seen.
+// Dedup keys absorb the overlap. It reports a coverage gap whenever the newest known event is no longer reachable.
 package activity
 
 import (
@@ -33,6 +34,10 @@ const Collector = "activity"
 
 // Retention is the Events API retention window (30 days since 2025-01-30).
 const Retention = 30 * 24 * time.Hour
+
+// OverlapEvents is how many already known events a poll reads past the newest known one (within the page budget),
+// so events that became visible late, with lower IDs, are still collected.
+const OverlapEvents = 10
 
 // Feed is one configured feed with its credential.
 type Feed struct {
@@ -142,9 +147,9 @@ func (p *Poller) PollFeed(ctx context.Context, f Feed) (time.Duration, error) {
 	newest := cur
 	newestID := lastID
 	var oldestSeen string
-	pages, stored := 0, 0
-	// Stop once the newest known event is reached (or after the page budget).
-	for next != "" && pages < p.Account.Activity.MaxPages && (!reached || lastID == 0) {
+	pages, stored, known := 0, 0, 0
+	// Stop once the newest known event is reached and the overlap was read (or after the page budget).
+	for next != "" && pages < p.Account.Activity.MaxPages && (!reached || lastID == 0 || known < OverlapEvents) {
 		resp, err := p.GitHub.Do(ctx, f.Cred, githubapi.Request{URL: next, ETag: etag})
 		if err != nil {
 			p.fail(ctx, feedID, err)
@@ -171,8 +176,9 @@ func (p *Poller) PollFeed(ctx context.Context, f Feed) (time.Duration, error) {
 				return pollInterval, err
 			}
 			if lastID != 0 && id <= lastID {
+				// Not skipped: a late-visible event can have a lower ID. Already stored events are deduplicated.
 				reached = true
-				continue
+				known++
 			}
 			if id > newestID {
 				newestID, newest.LastID = id, d.GitHub.EventID
