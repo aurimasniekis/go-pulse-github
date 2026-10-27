@@ -39,7 +39,8 @@ and in the CHANGELOG `Security` section, and explain why.
 - State lives in SQLite; events go to Pulse. No other datastore.
 - Never call work done when it is only implemented: say whether it is implemented, tested or externally verified.
 - Commits follow Conventional Commits. User-facing changes get a CHANGELOG entry under `[Unreleased]`.
-- Design changes that alter a trade-off get an ADR in [docs/adr](docs/adr).
+- Design changes that alter a trade-off get a decision record in
+  [site/design/decisions.md](site/design/decisions.md).
 
 ## Reporting security issues
 
