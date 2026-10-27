@@ -18,7 +18,7 @@ env:
 
 jobs:
   go:
-    name: go (fmt, vet, lint, race tests)
+    name: go (fmt, lint, vet, race tests)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -37,25 +37,38 @@ jobs:
         run: make test
 
   security:
-    name: security (govulncheck)
+    name: security (govulncheck, gitleaks)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
       - name: govulncheck
         run: make vuln
+      - name: gitleaks
+        run: make secrets
 
   image:
-    name: image (amd64 + arm64 build, no push)
+    name: image build + smoke (no push)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - name: build
-        run: make docker-multiarch
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: pulse-github:ci
+          cache-from: type=gha,scope=ci-image
+          cache-to: type=gha,mode=max,scope=ci-image
+      - name: smoke
+        run: |
+          set -euo pipefail
+          docker run --rm pulse-github:ci version
+          test "$(docker image inspect pulse-github:ci --format '{{.Config.User}}')" = "65532:65532"

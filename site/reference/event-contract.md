@@ -161,7 +161,7 @@ When a document is larger than the server's `max_payload` (1 MiB on Pulse) minus
 
 ## Duplicates and consumer obligations
 
-- The same `publication_id` can be delivered more than once (at-least-once; see `architecture.md`). Consumers must be
+- The same `publication_id` can be delivered more than once (at-least-once; see [delivery guarantees](/design/architecture#delivery-guarantees)). Consumers must be
   idempotent on the event ID.
 - The same GitHub activity can arrive through several sources (webhook, notification, Events API, snapshot) as
   **different** events. They are intentionally not merged. Correlate them through `github.*` and `resource.*`

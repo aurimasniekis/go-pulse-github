@@ -5,8 +5,8 @@
 #   1. Create the Pulse client (on the Pulse host):
 #        pulse clients create pulse-github --grant 'publish:evt.github.>' --out secrets/pulse_github.creds
 #      Add --grant blobs only if pulse.blobs.enabled is true.
-#   2. Create a GitHub App (see docs/operations.md), download its private key to secrets/github_app_key.pem and set a
-#      webhook secret in secrets/github_webhook_secret.
+#   2. Create a GitHub App (https://aurimasniekis.github.io/go-pulse-github/guide/github), download its private key
+#      to secrets/github_app_key.pem and set a webhook secret in secrets/github_webhook_secret.
 #   3. For notifications/activity: a classic PAT in secrets/github_pat_<account>.
 #   4. Copy deploy/config.example.yaml to ./config.yaml and edit it.
 # Secret files should be owned by uid 65532 with mode 0400.

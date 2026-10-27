@@ -1,10 +1,27 @@
+# Build output
 /bin/
 /dist/
+/pulse-github
+*.test
+*.out
+coverage.*
+
+# Local runtime data and secrets — never commit
+/deploy/.local/
+/secrets/
+*.creds
+*.pem
 *.db
 *.db-wal
 *.db-shm
 *.db.lock
-*.creds
-*.pem
-/deploy/.local/
-coverage.out
+
+# Documentation website (site/)
+/site/node_modules/
+/site/.vitepress/dist/
+/site/.vitepress/cache/
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store

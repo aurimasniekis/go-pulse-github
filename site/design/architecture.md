@@ -39,7 +39,7 @@ pinned in `go.mod`. The Pulse module requires Go 1.27.3, so this module does too
 | Max payload | `MaxMsgSize = 1<<20`, NATS `max_payload` | The body plus headers must fit. The dispatcher reads `nc.MaxPayload()` and keeps 8 KiB for headers. |
 | Blobs | `pulse.Client.PutBlob` | Every call stores a **new** object name. pulse-github persists the reference before publishing, so a retry reuses the same blob. |
 | Credentials | `pulse.Connect(WithCredsFile)` | The client ID comes from the JWT tag `pulse-client:<id>`. The SDK sets the inbox prefix `_INBOX_<id>`. |
-| Grants | `internal/natsauth/grants.go` | `publish:evt.github.>` is enough. `blobs` is needed only for blob offload. NATS enforces denials, and they surface as **timeouts** (`docs/ENVELOPE.md`). |
+| Grants | `internal/natsauth/grants.go` | `publish:evt.github.>` is enough. `blobs` is needed only for blob offload. NATS enforces denials, and they surface as **timeouts** (go-pulse `docs/ENVELOPE.md`). |
 
 pulse-github does not create or modify streams, buckets, users or accounts. It is an ordinary Pulse client.
 
