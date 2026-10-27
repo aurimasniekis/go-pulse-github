@@ -4,7 +4,7 @@
 /pulse-github
 *.test
 *.out
-coverage.*
+/coverage.*
 
 # Local runtime data and secrets — never commit
 /deploy/.local/
