@@ -115,3 +115,14 @@ func TestSecretRef(t *testing.T) {
 		t.Errorf("String() = %q", s)
 	}
 }
+
+// The shipped example must always parse.
+func TestExampleConfig(t *testing.T) {
+	c, err := Load("../../deploy/config.example.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Accounts) != 2 || c.Accounts[1].Key != "example-org" {
+		t.Fatalf("%+v", c.Accounts)
+	}
+}

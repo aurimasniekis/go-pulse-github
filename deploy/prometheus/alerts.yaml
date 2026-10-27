@@ -1,0 +1,87 @@
+groups:
+  - name: pulse-github
+    rules:
+      - alert: PulseGitHubPublicationLag
+        expr: pulse_github_outbox_oldest_pending_seconds > 600
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: Publications to Pulse are delayed
+          description: The oldest pending publication is {{ $value | humanizeDuration }} old. Check NATS connectivity (pulse_github_nats_connected), the Pulse client's grants and the logs (error_class).
+
+      - alert: PulseGitHubNATSDisconnected
+        expr: pulse_github_nats_connected == 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: pulse-github is disconnected from Pulse
+          description: Captured events are queued durably in SQLite and will be published after reconnecting; watch storage.
+
+      - alert: PulseGitHubStoragePressure
+        expr: pulse_github_webhook_admission_open == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: pulse-github cannot accept new data
+          description: Storage is full, broken or the inbox is at its limit. Webhooks are answered with 503 and GitHub does NOT retry them automatically; redeliver from the App's advanced settings after recovery.
+
+      - alert: PulseGitHubStorageLow
+        expr: pulse_github_storage_free_bytes < 2 * 1024 * 1024 * 1024
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: State volume has less than 2 GiB free
+
+      - alert: PulseGitHubQuarantine
+        expr: pulse_github_quarantine_size > 0
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: Quarantined records need attention
+          description: Inspect with `pulse-github quarantine list`, fix the cause, then `pulse-github quarantine replay`.
+
+      - alert: PulseGitHubAuthFailures
+        expr: increase(pulse_github_credential_failures_total[30m]) > 5
+        labels: {severity: warning}
+        annotations:
+          summary: Repeated GitHub authentication failures for {{ $labels.credential }}
+
+      - alert: PulseGitHubCoverageDegraded
+        expr: pulse_github_coverage_degraded == 1
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.collector }} for {{ $labels.account }} cannot collect"
+          description: Credentials or permissions stopped working; a collector.access.lost event was published to the account's subjects.
+
+      - alert: PulseGitHubStalePolling
+        expr: time() - pulse_github_poll_last_success_timestamp_seconds > 1800
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.collector }}/{{ $labels.feed }} for {{ $labels.account }} has not polled successfully for 30m"
+
+      - alert: PulseGitHubRateLimited
+        expr: increase(pulse_github_github_rate_limited_total[1h]) > 10
+        labels: {severity: warning}
+        annotations:
+          summary: Sustained GitHub rate limiting for {{ $labels.credential }}
+          description: Lower poll frequency, page budgets or reconciliation budgets for this credential.
+
+      - alert: PulseGitHubCoverageGaps
+        expr: increase(pulse_github_coverage_gaps_total[1h]) > 0
+        labels: {severity: info}
+        annotations:
+          summary: "Coverage gap detected for {{ $labels.account }} ({{ $labels.collector }}, {{ $labels.kind }})"
+
+      - alert: PulseGitHubWebhookRejections
+        expr: increase(pulse_github_webhook_requests_total{result="rejected_signature"}[15m]) > 10
+        labels: {severity: warning}
+        annotations:
+          summary: Webhook signature failures (secret mismatch or rotation in progress)
+
+      - alert: PulseGitHubSQLiteErrors
+        expr: increase(pulse_github_sqlite_errors_total[10m]) > 0
+        labels: {severity: critical}
+        annotations:
+          summary: SQLite errors in pulse-github ({{ $labels.op }})

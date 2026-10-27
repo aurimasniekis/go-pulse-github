@@ -1,0 +1,61 @@
+# Example deployment next to an existing Pulse installation. pulse-github does not run NATS, streams or Pulse itself:
+# it connects as an ordinary least-privilege Pulse client.
+#
+# Before starting:
+#   1. Create the Pulse client (on the Pulse host):
+#        pulse clients create pulse-github --grant 'publish:evt.github.>' --out secrets/pulse_github.creds
+#      Add --grant blobs only if pulse.blobs.enabled is true.
+#   2. Create a GitHub App (see docs/operations.md), download its private key to secrets/github_app_key.pem and set a
+#      webhook secret in secrets/github_webhook_secret.
+#   3. For notifications/activity: a classic PAT in secrets/github_pat_<account>.
+#   4. Copy deploy/config.example.yaml to ./config.yaml and edit it.
+# Secret files should be owned by uid 65532 with mode 0400.
+
+secrets:
+  pulse_github_creds:
+    file: ./secrets/pulse_github.creds
+  github_app_key:
+    file: ./secrets/github_app_key.pem
+  github_webhook_secret:
+    file: ./secrets/github_webhook_secret
+  github_pat_aurimasniekis:
+    file: ./secrets/github_pat_aurimasniekis
+
+volumes:
+  pulse-github-data:
+
+services:
+  pulse-github:
+    image: ghcr.io/aurimasniekis/pulse-github:latest   # pin by digest in production
+    command: ["run"]
+    user: "65532:65532"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      PULSE_GITHUB_CONFIG: /etc/pulse-github/config.yaml
+      PULSE_GITHUB_PULSE_URL: tls://r.events.example.com:4222
+      GOMEMLIMIT: 200MiB
+    secrets:
+      - source: pulse_github_creds
+        target: pulse_github.creds
+      - source: github_app_key
+        target: github_app_key.pem
+      - github_webhook_secret
+      - github_pat_aurimasniekis
+    volumes:
+      - ./config.yaml:/etc/pulse-github/config.yaml:ro
+      - pulse-github-data:/data
+    ports:
+      - "127.0.0.1:8080:8080"   # webhook receiver: expose through your TLS reverse proxy only
+      - "127.0.0.1:9090:9090"   # health, readiness, metrics: host loopback / private network only
+    stop_signal: SIGTERM
+    stop_grace_period: 30s      # > service.shutdown_timeout (25s)
+    mem_limit: 256m
+    restart: unless-stopped
+
+  # Optional TLS reverse proxy for the webhook endpoint (GitHub needs a public HTTPS URL).
+  # caddy:
+  #   image: caddy:2
+  #   command: ["caddy", "reverse-proxy", "--from", "hooks.example.com", "--to", "pulse-github:8080"]
+  #   ports: ["443:443"]

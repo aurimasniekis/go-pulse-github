@@ -90,7 +90,7 @@ func New(ctx context.Context, cfg *config.Config, db *storage.DB, log *slog.Logg
 	hc := deps.HTTPClient
 	if hc == nil {
 		var err error
-		if hc, err = githubHTTPClient(cfg.GitHub); err != nil {
+		if hc, err = GitHubHTTPClient(cfg.GitHub); err != nil {
 			return nil, err
 		}
 	}
@@ -229,7 +229,8 @@ func normalizeType(t string) string {
 	}
 }
 
-func githubHTTPClient(c config.GitHubConfig) (*http.Client, error) {
+// GitHubHTTPClient builds the TLS-verifying HTTP client for the GitHub API (system roots plus github.ca_files).
+func GitHubHTTPClient(c config.GitHubConfig) (*http.Client, error) {
 	pool, err := x509.SystemCertPool()
 	if err != nil || pool == nil {
 		pool = x509.NewCertPool()

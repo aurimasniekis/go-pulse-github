@@ -1,0 +1,34 @@
+name: e2e-pulse
+
+# End-to-end run against the published pulsed image (least-privilege client created through the Pulse admin API).
+# Manual and weekly, because it pulls images and exercises an external release.
+on:
+  workflow_dispatch:
+    inputs:
+      pulsed_image:
+        description: pulsed image to test against
+        default: ghcr.io/aurimasniekis/pulsed:0.1.3
+  schedule:
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+
+env:
+  GOTOOLCHAIN: local
+  GO_VERSION: "1.27.3"
+
+jobs:
+  e2e:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: e2e against real Pulse
+        env:
+          PULSED_IMAGE: ${{ inputs.pulsed_image || 'ghcr.io/aurimasniekis/pulsed:0.1.3' }}
+        run: ./scripts/e2e-pulse.sh

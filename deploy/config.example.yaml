@@ -1,0 +1,142 @@
+# pulse-github configuration (schema version 1).
+#
+# Secrets are never written here: every secret is a reference to a mounted file ({file: …}) or an environment
+# variable ({env: …}). Literal secret values are rejected at start-up.
+#
+# Operational settings can be overridden by environment variables:
+#   PULSE_GITHUB_CONFIG, PULSE_GITHUB_LOG_LEVEL, PULSE_GITHUB_LOG_FORMAT, PULSE_GITHUB_STORAGE_PATH,
+#   PULSE_GITHUB_PULSE_URL, PULSE_GITHUB_PULSE_CREDS_FILE, PULSE_GITHUB_PULSE_CA_FILE, PULSE_GITHUB_WEBHOOK_LISTEN,
+#   PULSE_GITHUB_ADMIN_LISTEN, PULSE_GITHUB_GITHUB_API_URL, PULSE_GITHUB_SHUTDOWN_TIMEOUT
+version: 1
+
+service:
+  source: pulse-github          # ce-source of every published event
+  shutdown_timeout: 25s         # keep below the container stop grace period (compose: 30s)
+
+log:
+  level: info                   # debug | info | warn | error
+  format: json                  # json (one line per entry, UTC) | text
+
+storage:
+  path: /data/pulse-github.db   # SQLite on a local persistent volume (not NFS: the run lock uses flock)
+  min_free_bytes: 512MiB        # below this, webhook admission closes (503) and pollers pause
+  max_db_bytes: 20GiB
+  max_inbox_pending: 100000
+  retention:
+    published: 168h             # published outbox rows
+    inbox_processed: 168h       # raw webhook bodies after normalization
+    observations: 840h          # dedup keys; keep longer than the 30-day Events API window
+    sweep_interval: 1h
+
+pulse:
+  url: tls://r.events.example.com:4222
+  creds_file: /run/secrets/pulse_github.creds   # client with grant publish:evt.github.> (and blobs, if enabled)
+  # ca_file: /run/secrets/pulse_ca.pem          # only while Pulse still serves its internal bootstrap certificate
+  subject_domain: github                        # evt.<subject_domain>.<account_key>.…
+  publish_timeout: 10s
+  blobs:
+    enabled: false              # true: payloads above max_payload go to the Pulse blobs bucket (needs the blobs grant)
+  max_message_bytes: 0          # 0 = the server's max_payload (Pulse: 1 MiB)
+
+outbox:
+  workers: 4                    # accounts published concurrently (each account is FIFO, one in flight)
+  poison_attempts: 5
+  backoff_initial: 1s
+  backoff_max: 5m
+  poll_interval: 1s
+
+webhook:
+  enabled: true
+  listen: 0.0.0.0:8080          # put a TLS reverse proxy in front; GitHub must reach it
+  path: /webhook
+  max_body_bytes: 26MiB         # GitHub caps payloads at 25 MB
+  read_timeout: 30s
+  secrets:                      # several secrets = rotation: add the new one, switch it on GitHub, remove the old one
+    - {file: /run/secrets/github_webhook_secret}
+  processor_poison_attempts: 5
+
+admin:
+  listen: 0.0.0.0:9090          # /healthz, /readyz, /metrics — keep on a private network
+  pprof:
+    enabled: false
+    # token: {file: /run/secrets/pprof_token}
+
+github:
+  api_url: https://api.github.com   # GitHub Enterprise Server: https://ghe.example.com/api/v3 (untested)
+  api_version: "2022-11-28"
+  # ca_files: [/run/secrets/ghe_ca.pem]
+  request_timeout: 30s
+  max_concurrent_requests: 8
+  rate_limit_reserve: 100       # requests per credential kept in reserve before waiting for the reset
+  app:
+    enabled: true
+    app_id: 123456
+    client_id: Iv23liEXAMPLE    # recommended JWT issuer
+    private_key: {file: /run/secrets/github_app_key.pem}
+    allowed_installation_ids: []  # empty: any installation on a configured account
+    reconcile_interval: 1h
+
+accounts:
+  # A personal account: webhooks from the App installed on it, notifications and activity with a classic PAT.
+  - login: aurimasniekis
+    key: aurimasniekis          # stable routing key; keep it when the GitHub login changes
+    type: user
+    # github_id: 15481          # optional; pinned automatically from authenticated sources on first sight
+    token: {file: /run/secrets/github_pat_aurimasniekis}   # classic PAT: notifications (or repo), read:user
+    repositories:
+      allow: []                 # owner/name globs; empty allows all
+      deny: []
+    webhook:
+      enabled: true
+    notifications:
+      enabled: true
+      interval: 60s             # GitHub's X-Poll-Interval is honoured when larger
+      overlap: 10m
+      max_pages: 20             # 50 threads per page
+      full_sweep_interval: 6h   # catches read-state changes that do not move updated_at
+      initial_lookback: 168h
+      enrichment:
+        enabled: false
+        max_per_hour: 200
+    activity:
+      enabled: true
+      interval: 60s
+      max_pages: 3              # 100 events per page; the Events API returns at most 300
+      feeds:
+        - {kind: user_events}
+        - {kind: received_events}
+        # - {kind: user_org_events, org: example-org}
+    reconcile:
+      enabled: false
+      interval: 6h
+      lookback: 24h
+      kinds: [repository, issues, pulls, releases]
+      max_requests_per_run: 300
+      max_duration_per_run: 10m
+      backfill_on_startup: false
+      backfill_lookback: 168h
+      backfill_max_requests: 1000
+
+  # An organization: App webhooks plus optional reconciliation.
+  - login: example-org
+    type: organization
+    webhook:
+      enabled: true
+    activity:
+      enabled: false
+      feeds:
+        - {kind: org_events, org: example-org, credential: installation}
+        # Enterprise Cloud only, organization owner's classic PAT with read:audit_log:
+        # - {kind: audit_log, org: example-org}
+    reconcile:
+      enabled: true
+      kinds: [repository, issues, pulls, releases, workflow_runs]
+
+routing:
+  # Explicit cross-account routing: org webhooks for one repository also go to the personal account.
+  shares:
+    - from: example-org
+      to: aurimasniekis
+      sources: [webhook]
+      repositories:
+        allow: [example-org/pulse-*]
