@@ -70,6 +70,46 @@ func TestGuard(t *testing.T) {
 	}
 }
 
+// The retention sweep frees pages but never shrinks the file. Only live data may count against max_db_bytes, or
+// admission would stay closed for good once the file had grown past the cap.
+func TestGuardSizeCapCountsLiveData(t *testing.T) {
+	db := testutil.OpenDB(t)
+	ctx := context.Background()
+	_ = db.WriteInstance(ctx, "test", "dev", time.Now())
+	g := NewGuard(db, GuardConfig{MaxDBBytes: 2 << 20, MaxInboxPending: 100}, nil, testutil.Logger(), time.Now)
+	g.FreeBytes = func(string) (uint64, error) { return 1 << 40, nil }
+	body := []byte(`{"x":"` + strings.Repeat("a", 1<<20) + `"}`)
+	for _, d := range []string{"a", "b", "c"} {
+		_, _ = db.InsertDelivery(ctx, storage.Delivery{DeliveryID: d, Event: "e", Body: body, ReceivedAt: time.Now()})
+	}
+	if err := g.Check(ctx); err == nil || !strings.Contains(err.Error(), "max_db_bytes") {
+		t.Fatalf("3 MiB of live data under a 2 MiB cap: %v", err)
+	}
+	old := time.Now().Add(-time.Hour)
+	rows, _ := db.DueInbox(ctx, time.Now(), 10)
+	if len(rows) != 3 {
+		t.Fatalf("inbox rows: %d", len(rows))
+	}
+	_ = db.Tx(ctx, func(tx *storage.Tx) error {
+		for _, r := range rows {
+			if err := tx.MarkInbox(ctx, r.ID, storage.InboxProcessed, old); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if _, err := db.Sweep(ctx, time.Now(), storage.RetentionPolicy{Published: time.Minute, InboxProcessed: time.Minute,
+		Observations: 24 * time.Hour}); err != nil {
+		t.Fatal(err)
+	}
+	if db.SizeBytes() <= 2<<20 {
+		t.Fatalf("test needs a file larger than the cap after the sweep, got %d", db.SizeBytes())
+	}
+	if err := g.Check(ctx); err != nil {
+		t.Fatalf("swept bodies must not keep admission closed: %v", err)
+	}
+}
+
 func TestShutdownClosesAdmission(t *testing.T) {
 	db := testutil.OpenDB(t)
 	_ = db.WriteInstance(context.Background(), "test", "dev", time.Now())

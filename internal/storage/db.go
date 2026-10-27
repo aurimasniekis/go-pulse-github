@@ -42,6 +42,8 @@ func dsn(path string, readOnly bool) string {
 	q.Add("_pragma", "foreign_keys(1)")
 	q.Add("_pragma", "journal_mode(WAL)")
 	q.Add("_pragma", "synchronous(FULL)")
+	// Truncate the WAL file back to this size after checkpoints instead of keeping its high-water mark.
+	q.Add("_pragma", "journal_size_limit(67108864)")
 	if readOnly {
 		q.Add("_pragma", "query_only(1)")
 	} else {
@@ -146,6 +148,18 @@ type Tx struct{ tx *sql.Tx }
 
 func (t *Tx) exec(ctx context.Context, q string, args ...any) (sql.Result, error) {
 	return t.tx.ExecContext(ctx, q, args...)
+}
+
+// UsedBytes returns the bytes held by live data: the pages in use, without SQLite's free list. Pages freed by the
+// retention sweep are reused for new rows but never shrink the file, so a size cap must not count them. The WAL is
+// left out: it is transient and truncated to journal_size_limit when it resets.
+func (d *DB) UsedBytes(ctx context.Context) (int64, error) {
+	var pageSize, pages, free int64
+	if err := d.r.QueryRowContext(ctx, `SELECT page_size, page_count, freelist_count FROM pragma_page_size, pragma_page_count, pragma_freelist_count`).
+		Scan(&pageSize, &pages, &free); err != nil {
+		return 0, err
+	}
+	return pageSize * (pages - free), nil
 }
 
 // SizeBytes returns the database plus WAL size on disk.

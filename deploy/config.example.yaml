@@ -20,7 +20,7 @@ log:
 storage:
   path: /data/pulse-github.db   # SQLite on a local persistent volume (not NFS: the run lock uses flock)
   min_free_bytes: 512MiB        # below this, webhook admission closes (503) and pollers pause
-  max_db_bytes: 20GiB
+  max_db_bytes: 20GiB           # live data; space freed by the retention sweep is reused
   max_inbox_pending: 100000
   retention:
     published: 168h             # published outbox rows

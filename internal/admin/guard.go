@@ -95,7 +95,15 @@ func (g *Guard) check(ctx context.Context) error {
 		return fmt.Errorf("free space %d bytes is below storage.min_free_bytes %d", free, g.cfg.MinFreeBytes)
 	}
 	if g.cfg.MaxDBBytes > 0 && size > g.cfg.MaxDBBytes {
-		return fmt.Errorf("database size %d bytes exceeds storage.max_db_bytes %d", size, g.cfg.MaxDBBytes)
+		// The file never shrinks after the retention sweep; only live data counts against the cap.
+		used, err := g.db.UsedBytes(cctx)
+		if err != nil {
+			g.sqlErr("used_bytes")
+			return fmt.Errorf("database unavailable: %w", err)
+		}
+		if used > g.cfg.MaxDBBytes {
+			return fmt.Errorf("database holds %d bytes of live data, over storage.max_db_bytes %d", used, g.cfg.MaxDBBytes)
+		}
 	}
 	n, err := g.db.InboxPending(cctx)
 	if err != nil {
