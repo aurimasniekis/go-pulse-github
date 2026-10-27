@@ -94,8 +94,15 @@ docker compose up -d
 pulse sub 'evt.github.>' --since 1h
 ```
 
-There is no published image yet: build it with `make image IMAGE=ghcr.io/aurimasniekis/pulse-github:latest`. The
-[quick start](https://aurimasniekis.github.io/go-pulse-github/guide/quick-start) walks through every step, including
+Images are on Docker Hub as [`aurimasniekis/pulse-github`](https://hub.docker.com/r/aurimasniekis/pulse-github)
+(mirrored to `ghcr.io/aurimasniekis/pulse-github`) for linux/amd64 and linux/arm64, with an SBOM and build provenance.
+Pin the image by digest and verify it first:
+
+```sh
+gh attestation verify oci://ghcr.io/aurimasniekis/pulse-github:0.1.0 --repo aurimasniekis/go-pulse-github
+```
+
+The [quick start](https://aurimasniekis.github.io/go-pulse-github/guide/quick-start) walks through every step, including
 the GitHub App settings and a polling-only setup without inbound access.
 
 ## Events
@@ -139,7 +146,8 @@ The Pulse SDK requires Go 1.27.3. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Status
 
-Not released yet. Verified in this repository: unit and integration tests (including an embedded nats-server in
+**Release 0.1.0**, the first release; every release is listed in [CHANGELOG.md](CHANGELOG.md). Verified in this
+repository: unit and integration tests (including an embedded nats-server in
 operator mode with Pulse v0.1.3's `EVENTS` configuration and permissions, and a webhook → SQLite → SDK → JetStream run
 across a NATS outage), an end-to-end run against the real `pulsed` 0.1.3 image, and the image running read-only as
 uid 65532. Not verified: live GitHub credentials (GitHub behaviour is tested against a fake server built from the

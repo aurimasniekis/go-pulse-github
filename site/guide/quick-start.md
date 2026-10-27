@@ -11,12 +11,12 @@ You need:
 - for webhooks, a public HTTPS hostname (for example `hooks.example.com`) that can reach the container. Without one,
   run [polling only](#polling-only).
 
-::: tip No release yet
-There is no published image yet. Build it locally under the name the Compose file uses:
+::: tip Images
+Releases are published as `ghcr.io/aurimasniekis/pulse-github` and `docker.io/aurimasniekis/pulse-github` for
+linux/amd64 and linux/arm64. In production, pin a version by digest and verify it:
 
 ```sh
-git clone https://github.com/aurimasniekis/go-pulse-github.git && cd go-pulse-github
-make image IMAGE=ghcr.io/aurimasniekis/pulse-github:latest
+gh attestation verify oci://ghcr.io/aurimasniekis/pulse-github:0.1.0 --repo aurimasniekis/go-pulse-github
 ```
 :::
 

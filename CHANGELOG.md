@@ -5,6 +5,10 @@ versioning: [SemVer](https://semver.org/spec/v2.0.0.html), see [docs/releasing.m
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-27
+
+First release.
+
 ### Added
 - GitHub App webhook receiver: HMAC verification with secret rotation, size and time limits, and a durable SQLite
   inbox. GitHub gets its 2xx only after the delivery is committed. Unknown events and actions are kept and published.
@@ -22,3 +26,12 @@ versioning: [SemVer](https://semver.org/spec/v2.0.0.html), see [docs/releasing.m
   `healthcheck`.
 - Distroless, non-root, multi-arch container image; Compose example, commented configuration and Prometheus alerts.
 - Documentation website (VitePress, GitHub Pages) with coverage, event contract, configuration and operations guides.
+
+### Known limitations
+- Not tested against live GitHub credentials: GitHub behaviour is tested against a fake server built from GitHub's
+  documentation. GitHub Enterprise Server and the audit-log query format are unverified.
+- One active process per state database; no high availability.
+- Delivery is at least once: consumers deduplicate by event ID.
+
+[Unreleased]: https://github.com/aurimasniekis/go-pulse-github/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/aurimasniekis/go-pulse-github/releases/tag/v0.1.0
