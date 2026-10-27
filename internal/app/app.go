@@ -59,6 +59,7 @@ type Service struct {
 	Receiver   *webhook.Receiver
 	Now        func() time.Time
 
+	pats    map[string]*githubauth.PAT
 	runners []namedRunner
 	closers []func()
 }

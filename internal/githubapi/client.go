@@ -193,7 +193,7 @@ func (c *Client) BaseURL() *url.URL { u := *c.base; return &u }
 // headers can never send credentials elsewhere.
 func (c *Client) ResolveURL(raw string) (*url.URL, error) {
 	if strings.HasPrefix(raw, "/") && !strings.HasPrefix(raw, "//") {
-		return url.Parse(c.base.String() + raw)
+		raw = c.base.String() + raw
 	}
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -270,10 +270,8 @@ func (c *Client) Do(ctx context.Context, cred Credential, r Request) (*Response,
 			reauthed = true
 			continue
 		case ClassRateLimited, ClassSecondaryLimited:
+			// classify blocked the credential until the retry time; waitForBudget performs the wait.
 			if ge.RetryAfter > c.opts.MaxInlineWait {
-				return nil, err
-			}
-			if err := c.opts.Sleep(ctx, ge.RetryAfter); err != nil {
 				return nil, err
 			}
 		case ClassServer, ClassNetwork:

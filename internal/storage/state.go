@@ -94,15 +94,15 @@ func (d *DB) Checkpoints(ctx context.Context) ([]Checkpoint, error) {
 	return out, rows.Err()
 }
 
-// NotificationFingerprint returns the stored fingerprint of a thread ("" when unseen).
-func (t *Tx) NotificationFingerprint(ctx context.Context, account, threadID string) (string, error) {
-	var fp string
-	err := t.tx.QueryRowContext(ctx, `SELECT fingerprint FROM notification_state WHERE account_key = ? AND thread_id = ?`,
-		account, threadID).Scan(&fp)
+// NotificationState returns the stored fingerprint and updated_at of a thread ("" when unseen).
+func (t *Tx) NotificationState(ctx context.Context, account, threadID string) (fingerprint, updatedAt string, err error) {
+	var ua sql.NullString
+	err = t.tx.QueryRowContext(ctx, `SELECT fingerprint, updated_at FROM notification_state WHERE account_key = ?
+		AND thread_id = ?`, account, threadID).Scan(&fingerprint, &ua)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
+		return "", "", nil
 	}
-	return fp, err
+	return fingerprint, ua.String, err
 }
 
 // PutNotificationState stores the latest meaningful state of a thread.
