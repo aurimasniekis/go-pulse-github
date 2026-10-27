@@ -137,10 +137,10 @@ func (t *Tx) EnqueueEnrichment(ctx context.Context, j EnrichmentJob, now time.Ti
 	return err
 }
 
-// PendingEnrichment returns pending enrichment jobs, oldest first.
-func (d *DB) PendingEnrichment(ctx context.Context, limit int) ([]EnrichmentJob, error) {
+// PendingEnrichment returns pending enrichment jobs of one account (all accounts when account is empty), oldest first.
+func (d *DB) PendingEnrichment(ctx context.Context, account string, limit int) ([]EnrichmentJob, error) {
 	rows, err := d.r.QueryContext(ctx, `SELECT id, observation_id, account_key, kind, url, attempts FROM enrichment_jobs
-		WHERE state = 'pending' ORDER BY id LIMIT ?`, limit)
+		WHERE state = 'pending' AND (? = '' OR account_key = ?) ORDER BY id LIMIT ?`, account, account, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -154,6 +154,28 @@ func (d *DB) PendingEnrichment(ctx context.Context, limit int) ([]EnrichmentJob,
 		out = append(out, j)
 	}
 	return out, rows.Err()
+}
+
+// SkipEnrichmentExcept marks pending jobs of every account not in keys as skipped (enrichment disabled for them).
+func (d *DB) SkipEnrichmentExcept(ctx context.Context, keys []string, msg string, now time.Time) (int64, error) {
+	q := `UPDATE enrichment_jobs SET state = 'skipped', last_error = ?, updated_at = ? WHERE state = 'pending'`
+	args := []any{truncate(msg, 1000), ms(now)}
+	if len(keys) > 0 {
+		q += ` AND account_key NOT IN (?` + strings.Repeat(", ?", len(keys)-1) + `)`
+		for _, k := range keys {
+			args = append(args, k)
+		}
+	}
+	var n int64
+	err := d.Tx(ctx, func(tx *Tx) error {
+		res, err := tx.exec(ctx, q, args...)
+		if err != nil {
+			return err
+		}
+		n, _ = res.RowsAffected()
+		return nil
+	})
+	return n, err
 }
 
 // FinishEnrichment sets an enrichment job's state.

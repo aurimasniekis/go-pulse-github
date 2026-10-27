@@ -9,6 +9,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"log/slog"
+	"maps"
+	"slices"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -71,24 +73,27 @@ func (w *Worker) RunOnce(ctx context.Context) {
 	if w.Pressure != nil && w.Pressure.Pressure() {
 		return
 	}
-	jobs, err := w.DB.PendingEnrichment(ctx, 100)
-	if err != nil {
-		return
-	}
-	for _, j := range jobs {
-		if ctx.Err() != nil {
+	keys := slices.Sorted(maps.Keys(w.Accounts))
+	_, _ = w.DB.SkipEnrichmentExcept(ctx, keys, "enrichment disabled for account", w.Now())
+	// Each account reads its own queue, so one account's backlog never hides another account's jobs.
+	for _, key := range keys {
+		lim := w.limiters[key]
+		if lim.Tokens() < 1 {
+			continue // budget spent: the jobs wait
+		}
+		jobs, err := w.DB.PendingEnrichment(ctx, key, 20)
+		if err != nil {
 			return
 		}
-		acct, ok := w.Accounts[j.AccountKey]
-		lim := w.limiters[j.AccountKey]
-		if !ok {
-			w.finish(ctx, j, "skipped", "enrichment disabled for account")
-			continue
+		for _, j := range jobs {
+			if ctx.Err() != nil {
+				return
+			}
+			if !lim.AllowN(w.Now(), 1) {
+				break
+			}
+			w.fetch(ctx, w.Accounts[key], j)
 		}
-		if !lim.AllowN(w.Now(), 1) {
-			continue // budget spent: the job waits; other accounts keep their own budgets
-		}
-		w.fetch(ctx, acct, j)
 	}
 }
 

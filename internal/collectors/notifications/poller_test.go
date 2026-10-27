@@ -201,7 +201,7 @@ func TestPollStateChanges(t *testing.T) {
 		t.Fatalf("read-state change: %+v basis %s", p, rows[3].TimeBasis)
 	}
 	// Enrichment jobs were queued for new threads; never for URLs outside the API origin.
-	jobs, _ := w.db.PendingEnrichment(ctx, 10)
+	jobs, _ := w.db.PendingEnrichment(ctx, "", 10)
 	if len(jobs) != 4 {
 		t.Fatalf("enrichment jobs %d", len(jobs))
 	}

@@ -51,7 +51,10 @@ func (d *DB) Sweep(ctx context.Context, now time.Time, p RetentionPolicy) (Sweep
 			return err
 		}
 		r.Observations, _ = res.RowsAffected()
-		res, err = tx.exec(ctx, `DELETE FROM enrichment_jobs WHERE state != 'pending' AND updated_at < ?`, ms(now.Add(-p.Published)))
+		// Pending jobs expire too: enrichment describes current state, so a fetch delayed past retention by a spent
+		// budget is no longer worth making, and the queue must not grow without bound.
+		res, err = tx.exec(ctx, `DELETE FROM enrichment_jobs WHERE (state != 'pending' AND updated_at < ?)
+			OR (state = 'pending' AND created_at < ?)`, ms(now.Add(-p.Published)), ms(now.Add(-p.Published)))
 		if err != nil {
 			return err
 		}
