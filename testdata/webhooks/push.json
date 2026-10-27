@@ -1,0 +1,1 @@
+{"ref":"refs/heads/main","before":"0000000000000000000000000000000000000000","after":"abc123","repository":{"id":9001,"full_name":"example-org/tool","pushed_at":1761000000,"owner":{"id":7001,"login":"example-org","type":"Organization"}},"commits":[],"sender":{"id":99,"login":"someone","type":"User"},"installation":{"id":555}}

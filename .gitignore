@@ -1,0 +1,10 @@
+/bin/
+/dist/
+*.db
+*.db-wal
+*.db-shm
+*.db.lock
+*.creds
+*.pem
+/deploy/.local/
+coverage.out
