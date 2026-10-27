@@ -130,6 +130,7 @@ quarantine replays all reuse the same publication ID.
 | Pulse/NATS down | The SDK reconnects forever. Publishes fail with transient classes (`nats_unavailable`, `publish_timeout`, `no_stream`), rows stay pending with jittered exponential backoff (1 s up to 5 min), and webhook admission stays open. |
 | Missing publish grant | Shows up as `publish_timeout` while connected. It is retried, never quarantined, and alerts fire on publication lag. `doctor --test-publish` diagnoses it. |
 | Invalid subject or oversized payload without blobs | Permanent. The row is quarantined with an actionable error and the account's partition continues. |
+| Server rejects a message (JetStream API error) | `publish_rejected`, retried with backoff, then quarantined after `outbox.poison_attempts` consecutive rejections so the account's partition continues. Replay it after fixing the cause. |
 | Webhook body cannot be normalized | Retried, then quarantined after `processor_poison_attempts`. |
 | Installation lookup fails | Retried with backoff. The delivery stays `pending`. |
 | Delivery matches no configured account | Stored as `unrouted`. It is requeued after installation reconciliation finds changes. |

@@ -22,7 +22,7 @@ func TestMigrationsAndPragmas(t *testing.T) {
 	db := open(t)
 	ctx := context.Background()
 	v, err := db.SchemaVersion(ctx)
-	if err != nil || v != "0002_observation_routes" {
+	if err != nil || v != "0003_outbox_rejections" {
 		t.Fatalf("schema %q %v", v, err)
 	}
 	var mode string
@@ -110,7 +110,7 @@ func TestOutboxFIFOAndQuarantine(t *testing.T) {
 	if head.ObservationID != "o1" {
 		t.Fatalf("head %s", head.ObservationID)
 	}
-	if err := db.PublishFailed(ctx, head.Seq, time.Now(), "invalid_subject", "bad", true); err != nil {
+	if err := db.PublishFailed(ctx, head.Seq, time.Now(), "invalid_subject", "bad", false, true); err != nil {
 		t.Fatal(err)
 	}
 	head, _ = db.HeadOfPartition(ctx, "a")

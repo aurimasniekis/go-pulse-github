@@ -6,6 +6,7 @@
 |---|---|
 | Events not appearing in Pulse | `status` (pending outbox?), `pulse_github_nats_connected`, logs with `component=outbox` and their `error_class`. `publish_timeout` while connected usually means a missing `publish` grant: run `doctor --test-publish`. |
 | `invalid_subject` in quarantine | Should not happen: subjects are validated before storage. Report it with the `quarantine list --json` output. |
+| `publish_rejected` in quarantine | JetStream refused the message several times in a row (stream limits, a changed stream configuration). `quarantine list --json` shows the server's error; fix the cause, then `quarantine replay`. |
 | `payload_too_large` in quarantine | Enable `pulse.blobs` and add the `blobs` grant, then `quarantine replay`. |
 | Webhooks answered 503 | `/readyz` body; free disk (`storage.min_free_bytes`), `max_db_bytes`, inbox depth (processor stuck? look for `installation_lookup` errors). |
 | Webhooks answered 401 | Secret mismatch, or rotation not finished; `webhook_requests_total{result="rejected_signature"}`. |

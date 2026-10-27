@@ -179,6 +179,9 @@ const (
 	ClassNoStream        = "no_stream"
 	ClassUnavailable     = "nats_unavailable"
 	ClassBlob            = "blob_error"
+	// ClassRejected is a JetStream API error for this message: the server answered and refused it. It is retried,
+	// and quarantined after outbox.poison_attempts so it cannot block its account's partition forever.
+	ClassRejected = "publish_rejected"
 	ClassOther           = "publish_error"
 )
 
@@ -188,6 +191,7 @@ const jsMessageTooLarge = 10054
 // Classify maps a publish error to a stable class and whether it is permanent (retrying cannot succeed).
 func Classify(err error) (class string, permanent bool) {
 	var api *jetstream.APIError
+	var legacyAPI *nats.APIError
 	switch {
 	case errors.Is(err, envelope.ErrSubject):
 		return ClassInvalidSubject, true
@@ -203,6 +207,8 @@ func Classify(err error) (class string, permanent bool) {
 	case errors.Is(err, nats.ErrConnectionClosed), errors.Is(err, nats.ErrDisconnected),
 		errors.Is(err, nats.ErrConnectionReconnecting), errors.Is(err, nats.ErrConnectionDraining):
 		return ClassUnavailable, false
+	case errors.As(err, &api), errors.As(err, &legacyAPI):
+		return ClassRejected, false
 	default:
 		return ClassOther, false
 	}

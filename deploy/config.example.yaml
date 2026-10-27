@@ -40,7 +40,7 @@ pulse:
 
 outbox:
   workers: 4                    # accounts published concurrently (each account is FIFO, one in flight)
-  poison_attempts: 5
+  poison_attempts: 5            # quarantine a publication the server rejects this many times in a row (outages retry forever)
   backoff_initial: 1s
   backoff_max: 5m
   poll_interval: 1s

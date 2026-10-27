@@ -29,6 +29,9 @@ type Config struct {
 	PollInterval   time.Duration
 	PublishTimeout time.Duration
 	BlobsEnabled   bool
+	// PoisonAttempts quarantines a publication the server keeps rejecting (ClassRejected) after this many attempts.
+	// Outages and timeouts are retried without limit.
+	PoisonAttempts int
 	// MaxMessageBytes overrides the server max_payload when positive (and smaller).
 	MaxMessageBytes int64
 }
@@ -64,6 +67,9 @@ func New(db *storage.DB, pub publisher.Publisher, cfg Config, log *slog.Logger, 
 	}
 	if cfg.Workers < 1 {
 		cfg.Workers = 1
+	}
+	if cfg.PoisonAttempts < 1 {
+		cfg.PoisonAttempts = 5
 	}
 	return &Dispatcher{
 		db: db, pub: pub, cfg: cfg, log: log.With(observability.FieldComponent, "outbox"), metrics: m, now: now,
@@ -276,6 +282,11 @@ func (d *Dispatcher) limit() int64 {
 
 func (d *Dispatcher) fail(ctx context.Context, row *storage.OutboxRow, log *slog.Logger, class string, err error, permanent bool) bool {
 	attempts := row.Attempts + 1
+	rejected := class == publisher.ClassRejected
+	if rejected && row.Rejections+1 >= d.cfg.PoisonAttempts {
+		permanent = true
+		err = fmt.Errorf("rejected %d times in a row: %w", row.Rejections+1, err)
+	}
 	next := d.now().Add(Backoff(attempts, d.cfg.BackoffInitial, d.cfg.BackoffMax))
 	result := "failed"
 	if permanent {
@@ -288,7 +299,7 @@ func (d *Dispatcher) fail(ctx context.Context, row *storage.OutboxRow, log *slog
 	if d.metrics != nil {
 		d.metrics.Publications.WithLabelValues(row.AccountKey, result).Inc()
 	}
-	if serr := d.db.PublishFailed(context.WithoutCancel(ctx), row.Seq, next, class, err.Error(), permanent); serr != nil {
+	if serr := d.db.PublishFailed(context.WithoutCancel(ctx), row.Seq, next, class, err.Error(), rejected, permanent); serr != nil {
 		d.sqliteError("publish_failed", serr)
 		return false
 	}

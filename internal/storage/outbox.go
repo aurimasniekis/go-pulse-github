@@ -53,6 +53,7 @@ type OutboxRow struct {
 	Blob       *Blob
 	State      string
 	Attempts   int
+	Rejections int
 	NextAt     time.Time
 	LastError  string
 	ErrorClass string
@@ -127,7 +128,7 @@ func (d *DB) PendingPartitions(ctx context.Context) ([]string, error) {
 }
 
 const outboxCols = `seq, publication_id, observation_id, account_key, subject, ce_type, ce_time, time_basis, payload,
-	blob_bucket, blob_name, blob_size, blob_sha256, state, attempts, next_attempt_at, COALESCE(last_error, ''),
+	blob_bucket, blob_name, blob_size, blob_sha256, state, attempts, rejections, next_attempt_at, COALESCE(last_error, ''),
 	COALESCE(error_class, ''), created_at`
 
 // HeadOfPartition returns the oldest pending publication of an account (FIFO head), or ErrNotFound.
@@ -193,7 +194,7 @@ func scanOutbox(rows *sql.Rows) ([]OutboxRow, error) {
 		var bb, bn, bs sql.NullString
 		var bsize sql.NullInt64
 		if err := rows.Scan(&r.Seq, &r.PublicationID, &r.ObservationID, &r.AccountKey, &r.Subject, &r.CEType, &ceTime,
-			&r.TimeBasis, &r.Payload, &bb, &bn, &bsize, &bs, &r.State, &r.Attempts, &nextAt, &r.LastError, &r.ErrorClass,
+			&r.TimeBasis, &r.Payload, &bb, &bn, &bsize, &bs, &r.State, &r.Attempts, &r.Rejections, &nextAt, &r.LastError, &r.ErrorClass,
 			&created); err != nil {
 			return nil, err
 		}
@@ -228,14 +229,16 @@ func (d *DB) MarkPublished(ctx context.Context, seq int64, streamSeq uint64, dup
 }
 
 // PublishFailed records a failed attempt. With quarantine the publication stops being retried.
-func (d *DB) PublishFailed(ctx context.Context, seq int64, nextAt time.Time, class, msg string, quarantine bool) error {
+// rejected counts the attempt as a server rejection; any other failure resets the consecutive-rejection count.
+func (d *DB) PublishFailed(ctx context.Context, seq int64, nextAt time.Time, class, msg string, rejected, quarantine bool) error {
 	state := OutboxPending
 	if quarantine {
 		state = OutboxQuarantined
 	}
 	return d.Tx(ctx, func(tx *Tx) error {
-		_, err := tx.exec(ctx, `UPDATE outbox SET attempts = attempts + 1, next_attempt_at = ?, error_class = ?,
-			last_error = ?, state = ? WHERE seq = ?`, ms(nextAt), class, truncate(msg, 1000), state, seq)
+		_, err := tx.exec(ctx, `UPDATE outbox SET attempts = attempts + 1,
+			rejections = CASE WHEN ? THEN rejections + 1 ELSE 0 END, next_attempt_at = ?, error_class = ?,
+			last_error = ?, state = ? WHERE seq = ?`, rejected, ms(nextAt), class, truncate(msg, 1000), state, seq)
 		return err
 	})
 }

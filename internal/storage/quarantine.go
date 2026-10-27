@@ -79,7 +79,8 @@ func (d *DB) ReplayQuarantine(ctx context.Context, kind, id string) (int64, erro
 			}
 		}
 		if kind == "" || kind == QuarantineOutbox {
-			q := `UPDATE outbox SET state = 'pending', attempts = 0, next_attempt_at = 0 WHERE state = 'quarantined'`
+			q := `UPDATE outbox SET state = 'pending', attempts = 0, rejections = 0, next_attempt_at = 0
+				WHERE state = 'quarantined'`
 			args := []any{}
 			if id != "" {
 				q += ` AND publication_id = ?`

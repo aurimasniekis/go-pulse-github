@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/aurimasniekis/go-pulse-github/internal/events"
 	"github.com/aurimasniekis/go-pulse-github/internal/observability"
@@ -222,6 +223,37 @@ func TestInvalidSubjectQuarantined(t *testing.T) {
 	w.dispatcher(false).drain(ctx, "alice")
 	if st := w.stats(t); st.Quarantined != 1 {
 		t.Fatalf("%+v", st)
+	}
+}
+
+// A message the server keeps rejecting is quarantined after outbox.poison_attempts so later events of the account are
+// not stuck behind it; outages are retried without limit.
+func TestRejectedPublicationQuarantinedAfterPoisonAttempts(t *testing.T) {
+	w := newWorld(t)
+	ctx := context.Background()
+	w.queue(t, "alice", "d1", []byte(`{}`))
+	w.queue(t, "alice", "d2", []byte(`{}`))
+	d := w.dispatcher(false)
+	w.pub.SetErr(nats.ErrDisconnected)
+	for range 10 {
+		d.drain(ctx, "alice")
+		w.clock.Advance(time.Hour)
+	}
+	if st := w.stats(t); st.Quarantined != 0 {
+		t.Fatalf("an outage must never quarantine: %+v", st)
+	}
+	w.pub.SetErr(fmt.Errorf("publish: %w", &jetstream.APIError{Code: 503, ErrorCode: 10077, Description: "maximum messages exceeded"}))
+	for range 5 {
+		d.drain(ctx, "alice")
+		w.clock.Advance(time.Hour)
+	}
+	if st := w.stats(t); st.Quarantined != 1 {
+		t.Fatalf("want the head quarantined after 5 rejections: %+v", st)
+	}
+	w.pub.SetErr(nil)
+	d.drain(ctx, "alice")
+	if msgs := w.pub.Messages(); len(msgs) != 1 {
+		t.Fatalf("the partition must continue after quarantine: %d published", len(msgs))
 	}
 }
 

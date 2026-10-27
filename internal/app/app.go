@@ -133,7 +133,8 @@ func New(ctx context.Context, cfg *config.Config, db *storage.DB, log *slog.Logg
 	s.Dispatcher = outbox.New(db, s.Publisher, outbox.Config{
 		Workers: cfg.Outbox.Workers, BackoffInitial: cfg.Outbox.BackoffInitial.D(), BackoffMax: cfg.Outbox.BackoffMax.D(),
 		PollInterval: cfg.Outbox.PollInterval.D(), PublishTimeout: cfg.Pulse.PublishTimeout.D(),
-		BlobsEnabled: cfg.Pulse.Blobs.Enabled, MaxMessageBytes: int64(cfg.Pulse.MaxMessageBytes),
+		BlobsEnabled: cfg.Pulse.Blobs.Enabled, PoisonAttempts: cfg.Outbox.PoisonAttempts,
+		MaxMessageBytes: int64(cfg.Pulse.MaxMessageBytes),
 	}, log, m, now)
 	s.add("outbox", s.Dispatcher)
 
