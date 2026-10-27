@@ -40,6 +40,7 @@ type fakeNotifications struct {
 	pollInterval string
 	queries      []string
 	ims          []string
+	honorSince   bool // filter by updated_at >= since, as GitHub does
 }
 
 func (f *fakeNotifications) set(threads ...map[string]any) {
@@ -62,14 +63,23 @@ func (f *fakeNotifications) serve(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
+	threads := f.threads
+	if since := r.URL.Query().Get("since"); f.honorSince && since != "" {
+		threads = nil
+		for _, t := range f.threads {
+			if t["updated_at"].(string) >= since {
+				threads = append(threads, t)
+			}
+		}
+	}
 	page := 1
 	_, _ = fmt.Sscan(r.URL.Query().Get("page"), &page)
-	start, end := (page-1)*2, min(page*2, len(f.threads))
+	start, end := (page-1)*2, min(page*2, len(threads))
 	var items []map[string]any
-	if start < len(f.threads) {
-		items = f.threads[start:end]
+	if start < len(threads) {
+		items = threads[start:end]
 	}
-	if end < len(f.threads) {
+	if end < len(threads) {
 		q := r.URL.Query()
 		q.Set("page", fmt.Sprint(page+1))
 		w.Header().Set("Link", fmt.Sprintf(`<https://%s/notifications?%s>; rel="next"`, r.Host, q.Encode()))
@@ -219,10 +229,11 @@ func TestPollResumesAfterRestart(t *testing.T) {
 	}
 }
 
-// A page budget that ends before the newest-first listing does leaves older changes unread: the cursor does not
-// move and a coverage gap is published.
+// A page budget that ends before the newest-first listing does leaves older changes unread. The unread window is
+// published once as a gap and the cursor moves on; holding it back made every later poll exhaust the same window.
 func TestPollPageBudgetGap(t *testing.T) {
 	w := newWorld(t, 1, "notifications")
+	w.fake.honorSince = true
 	ctx := context.Background()
 	w.fake.set(mkThread("3", "mention", true, "2026-10-27T11:00:00Z"), mkThread("2", "mention", true, "2026-10-27T10:00:00Z"),
 		mkThread("1", "mention", true, "2026-10-26T10:00:00Z"))
@@ -233,9 +244,51 @@ func TestPollPageBudgetGap(t *testing.T) {
 	if len(got) != 3 || got[2] != "collector.coverage.gap_detected" {
 		t.Fatalf("%v", got)
 	}
-	cp, _ := w.db.Checkpoint(ctx, "aurimasniekis", Collector, Feed)
-	if strings.Contains(cp.Cursor, "since") {
-		t.Fatalf("cursor advanced past unread pages: %s", cp.Cursor)
+	if !strings.Contains(w.fake.queries[0], "since=") {
+		t.Fatalf("first poll must read initial_lookback incrementally, not sweep: %q", w.fake.queries[0])
+	}
+	rows, _ := w.db.OutboxRows(ctx, storage.OutboxPending, 10)
+	var gap struct {
+		Payload struct {
+			WindowStart *time.Time `json:"window_start"`
+			WindowEnd   *time.Time `json:"window_end"`
+		} `json:"payload"`
+	}
+	_ = json.Unmarshal(rows[2].Payload, &gap)
+	if gap.Payload.WindowStart == nil || gap.Payload.WindowEnd == nil || !gap.Payload.WindowEnd.Equal(time.Date(2026, 10, 27, 10, 0, 0, 0, time.UTC)) {
+		t.Fatalf("gap window %+v", gap.Payload)
+	}
+	// Later polls read only what changed since the cursor: no repeated gap.
+	for range 3 {
+		w.clock.Advance(time.Minute)
+		w.fake.set(w.fake.threads...) // new Last-Modified, so no 304
+		if _, err := w.poller.PollOnce(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := w.subjects(t); len(got) != 3 {
+		t.Fatalf("gap repeated: %v", got)
+	}
+	// The full sweep runs after full_sweep_interval. It is bounded by the same budget: one gap, then the schedule
+	// moves on instead of sweeping on every poll.
+	w.clock.Advance(6 * time.Hour)
+	w.fake.set(w.fake.threads...)
+	if _, err := w.poller.PollOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if q := w.fake.queries[len(w.fake.queries)-1]; strings.Contains(q, "since=") {
+		t.Fatalf("expected a full sweep: %q", q)
+	}
+	w.clock.Advance(time.Minute)
+	w.fake.set(w.fake.threads...)
+	if _, err := w.poller.PollOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if q := w.fake.queries[len(w.fake.queries)-1]; !strings.Contains(q, "since=") {
+		t.Fatalf("sweep repeated on the next poll: %q", q)
+	}
+	if got := w.subjects(t); len(got) != 4 || got[3] != "collector.coverage.gap_detected" {
+		t.Fatalf("want exactly one sweep gap: %v", got)
 	}
 }
 

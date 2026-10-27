@@ -115,12 +115,15 @@ func (p *Poller) PollOnce(ctx context.Context) (time.Duration, error) {
 	}
 	now := p.Now()
 	cfg := p.Account.Notifications
+	// The first poll reads initial_lookback incrementally and starts the full-sweep schedule; a full sweep of every
+	// listed thread runs only once per full_sweep_interval after that.
 	lastSweep := events.ParseTime(cur.LastFullSweep)
-	sweep := lastSweep == nil || now.Sub(*lastSweep) >= cfg.FullSweepInterval.D()
+	sweep := lastSweep != nil && now.Sub(*lastSweep) >= cfg.FullSweepInterval.D()
 	q := url.Values{"all": {"true"}, "per_page": {"50"}}
 	ims := ""
+	var since time.Time
 	if !sweep {
-		since := now.Add(-cfg.InitialLookback.D())
+		since = now.Add(-cfg.InitialLookback.D())
 		if t := events.ParseTime(cur.Since); t != nil {
 			since = t.Add(-cfg.Overlap.D())
 		}
@@ -128,7 +131,7 @@ func (p *Poller) PollOnce(ctx context.Context) (time.Duration, error) {
 		ims = cp.LastModified
 	}
 	next := "/notifications?" + q.Encode()
-	var maxUpdated string
+	var maxUpdated, minUpdated string
 	var lastModified string
 	var pollInterval time.Duration
 	pages, stored := 0, 0
@@ -147,7 +150,7 @@ func (p *Poller) PollOnce(ctx context.Context) (time.Duration, error) {
 			next = ""
 			break
 		}
-		n, mu, err := p.storePage(ctx, resp.Body, sweep)
+		n, mu, oldest, err := p.storePage(ctx, resp.Body, sweep)
 		if err != nil {
 			return pollInterval, err
 		}
@@ -155,25 +158,37 @@ func (p *Poller) PollOnce(ctx context.Context) (time.Duration, error) {
 		if mu > maxUpdated {
 			maxUpdated = mu
 		}
+		if oldest != "" && (minUpdated == "" || oldest < minUpdated) {
+			minUpdated = oldest
+		}
 		next = resp.Next
 	}
 	if lastModified == "" {
 		lastModified = cp.LastModified
 	}
-	// Notifications arrive newest first: a remaining next page means older changes were not read in this window.
+	// Notifications arrive newest first: a remaining next page means older changes were not read in this run. The
+	// cursor still moves past what was read, and the unread window is published once as a gap. Holding the cursor
+	// back instead would make every later poll exhaust the same, growing window and report the same gap again.
 	exhausted := next != ""
 	newCur := cur
-	if maxUpdated > newCur.Since && !exhausted {
+	if maxUpdated > newCur.Since {
 		newCur.Since = maxUpdated
 	}
-	if sweep && !exhausted {
+	if sweep || lastSweep == nil {
 		newCur.LastFullSweep = now.UTC().Format(time.RFC3339)
 	}
 	b, _ := json.Marshal(newCur)
 	err = p.DB.Tx(ctx, func(tx *storage.Tx) error {
 		if exhausted {
-			if err := p.Capturer.RecordGap(ctx, tx, p.Router, storage.Gap{AccountKey: key, Collector: Collector, Feed: Feed,
-				Kind: capture.GapPageBudget, Detail: fmt.Sprintf("more than %d pages of notifications changed; raise notifications.max_pages", cfg.MaxPages)}); err != nil {
+			g := storage.Gap{AccountKey: key, Collector: Collector, Feed: Feed, Kind: capture.GapPageBudget,
+				WindowEnd: events.ParseTime(minUpdated)}
+			if sweep {
+				g.Detail = fmt.Sprintf("full sweep stopped after %d pages; older threads were not re-checked for read-state changes; raise notifications.max_pages", cfg.MaxPages)
+			} else {
+				g.WindowStart = &since
+				g.Detail = fmt.Sprintf("more than %d pages of notifications changed; changes before window_end were not read; raise notifications.max_pages", cfg.MaxPages)
+			}
+			if err := p.Capturer.RecordGap(ctx, tx, p.Router, g); err != nil {
 				return err
 			}
 		}
@@ -300,16 +315,16 @@ func (t *thread) Fingerprint() string {
 		t.Subject.Type, t.Subject.URL, t.Subject.LatestCommentURL)
 }
 
-// storePage stores one page in one transaction and returns the stored count and newest updated_at.
-func (p *Poller) storePage(ctx context.Context, body []byte, sweep bool) (int, string, error) {
+// storePage stores one page in one transaction and returns the stored count and the newest and oldest updated_at.
+func (p *Poller) storePage(ctx context.Context, body []byte, sweep bool) (int, string, string, error) {
 	items, err := githubapi.SplitArray(body)
 	if err != nil {
-		return 0, "", fmt.Errorf("decode notifications: %w", err)
+		return 0, "", "", fmt.Errorf("decode notifications: %w", err)
 	}
 	key := p.Account.Key
 	now := p.Now()
 	stored := 0
-	maxUpdated := ""
+	maxUpdated, minUpdated := "", ""
 	err = p.DB.Tx(ctx, func(tx *storage.Tx) error {
 		for _, raw := range items {
 			var t thread
@@ -318,6 +333,9 @@ func (p *Poller) storePage(ctx context.Context, body []byte, sweep bool) (int, s
 			}
 			if t.UpdatedAt > maxUpdated {
 				maxUpdated = t.UpdatedAt
+			}
+			if minUpdated == "" || t.UpdatedAt < minUpdated {
+				minUpdated = t.UpdatedAt
 			}
 			fp := t.Fingerprint()
 			prev, prevUpdated, err := tx.NotificationState(ctx, key, t.ID)
@@ -361,7 +379,7 @@ func (p *Poller) storePage(ctx context.Context, body []byte, sweep bool) (int, s
 		}
 		return nil
 	})
-	return stored, maxUpdated, err
+	return stored, maxUpdated, minUpdated, err
 }
 
 func draft(key string, t *thread, raw json.RawMessage, fp, prev, action string, now time.Time, sweep, advanced bool) *events.Draft {
