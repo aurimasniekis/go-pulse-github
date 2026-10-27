@@ -171,3 +171,13 @@ func (d *DB) EnrichmentFailed(ctx context.Context, id int64, lastErr string, giv
 	}
 	return d.Tx(ctx, func(tx *Tx) error { return tx.FinishEnrichment(ctx, id, state, lastErr, now) })
 }
+
+// LastJob returns the newest job of an account and mode, or ErrNotFound.
+func (d *DB) LastJob(ctx context.Context, account, mode string) (*Job, error) {
+	j, err := scanJob(d.r.QueryRowContext(ctx, `SELECT `+jobCols+` FROM backfill_jobs WHERE account_key = ? AND mode = ?
+		ORDER BY id DESC LIMIT 1`, account, mode))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return j, err
+}

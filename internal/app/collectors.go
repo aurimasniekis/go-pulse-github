@@ -1,6 +1,8 @@
 package app
 
 import (
+	"context"
+
 	"github.com/aurimasniekis/go-pulse-github/internal/collectors/notifications"
 	"github.com/aurimasniekis/go-pulse-github/internal/enrich"
 	"github.com/aurimasniekis/go-pulse-github/internal/githubapi"
@@ -25,7 +27,7 @@ func (s *Service) tokenCred(key string) githubapi.Credential {
 }
 
 // addCollectors registers polling collectors, enrichment and reconciliation for configured accounts.
-func (s *Service) addCollectors() error {
+func (s *Service) addCollectors(ctx context.Context) error {
 	enrichAccounts := map[string]enrich.Account{}
 	for _, key := range s.Router.Keys() {
 		a, _ := s.Router.Account(key)
@@ -45,5 +47,5 @@ func (s *Service) addCollectors() error {
 			Accounts: enrichAccounts, Pressure: s.Guard, Log: s.Log, Metrics: s.Metrics, Now: s.Now,
 			Published: s.Dispatcher.Notify})
 	}
-	return s.addActivityAndReconcile()
+	return s.addActivityAndReconcile(ctx)
 }

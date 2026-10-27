@@ -164,7 +164,7 @@ func New(ctx context.Context, cfg *config.Config, db *storage.DB, log *slog.Logg
 			Metrics: m, Log: log.With(observability.FieldComponent, "webhook_receiver"), Now: now, Notify: s.Processor.Notify}
 		s.add("webhook_processor", s.Processor)
 	}
-	if err := s.addCollectors(); err != nil {
+	if err := s.addCollectors(ctx); err != nil {
 		return nil, err
 	}
 	s.add("stats", runnerFunc(s.statsLoop))

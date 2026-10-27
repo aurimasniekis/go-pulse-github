@@ -4,6 +4,7 @@ package reconcile
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strconv"
 
@@ -30,9 +31,15 @@ func (a *AppAPI) Installation(ctx context.Context, id int64) (*storage.Installat
 	return webhook.ParseInstallation(resp.Body)
 }
 
+// Listed is an installation with GitHub's original JSON object.
+type Listed struct {
+	*storage.Installation
+	Raw json.RawMessage
+}
+
 // Installations lists every installation of the App.
-func (a *AppAPI) Installations(ctx context.Context) ([]*storage.Installation, error) {
-	var out []*storage.Installation
+func (a *AppAPI) Installations(ctx context.Context) ([]Listed, error) {
+	var out []Listed
 	next := "/app/installations?per_page=100"
 	for pages := 0; next != "" && pages < 100; pages++ {
 		resp, err := a.Client.Do(ctx, a.Cred, githubapi.Request{URL: next})
@@ -48,7 +55,7 @@ func (a *AppAPI) Installations(ctx context.Context) ([]*storage.Installation, er
 			if err != nil {
 				return nil, err
 			}
-			out = append(out, in)
+			out = append(out, Listed{Installation: in, Raw: it})
 		}
 		next = resp.Next
 	}

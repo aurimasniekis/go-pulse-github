@@ -9,10 +9,11 @@ import (
 	"github.com/aurimasniekis/go-pulse-github/internal/collectors/activity"
 	"github.com/aurimasniekis/go-pulse-github/internal/config"
 	"github.com/aurimasniekis/go-pulse-github/internal/githubapi"
+	"github.com/aurimasniekis/go-pulse-github/internal/reconcile"
 	"github.com/aurimasniekis/go-pulse-github/internal/storage"
 )
 
-func (s *Service) addActivityAndReconcile() error {
+func (s *Service) addActivityAndReconcile(ctx context.Context) error {
 	for _, key := range s.Router.Keys() {
 		a, _ := s.Router.Account(key)
 		if a.Activity.Enabled {
@@ -30,7 +31,7 @@ func (s *Service) addActivityAndReconcile() error {
 				GitHub: s.GitHub, Pressure: s.Guard, Log: s.Log, Metrics: s.Metrics, Now: s.Now, Published: s.Dispatcher.Notify})
 		}
 	}
-	return s.addReconcile()
+	return s.addReconcile(ctx)
 }
 
 // installationCred authenticates as the App installation on the account. The installation is looked up on use, so
@@ -103,4 +104,35 @@ func (s *Service) InstallationFor(ctx context.Context, key string) (int64, error
 
 var _ githubapi.Credential = (*lazyInstallation)(nil)
 
-func (s *Service) addReconcile() error { return nil }
+// addReconcile registers installation reconciliation and the snapshot job runner (which also serves backfill jobs
+// queued by `pulse-github backfill`). Start-up backfill is queued once per account, not on every restart.
+func (s *Service) addReconcile(ctx context.Context) error {
+	if s.AppAPI == nil {
+		return nil
+	}
+	s.add("reconcile_installations", &reconcile.Installations{App: s.AppAPI, Tokens: s.Tokens, DB: s.DB, Router: s.Router,
+		Capturer: s.Capturer, Interval: s.Cfg.GitHub.App.ReconcileInterval.D(), Log: s.Log, Metrics: s.Metrics, Now: s.Now,
+		Bind: s.bindAccount, Published: s.Dispatcher.Notify,
+		Requeue: func(ctx context.Context) {
+			if n, err := s.DB.RequeueUnrouted(ctx); err == nil && n > 0 && s.Processor != nil {
+				s.Processor.Notify()
+			}
+		}})
+	for _, key := range s.Router.Keys() {
+		a, _ := s.Router.Account(key)
+		if !a.Reconcile.BackfillOnStartup {
+			continue
+		}
+		if _, err := s.DB.LastJob(ctx, key, reconcile.ModeBackfill); errors.Is(err, storage.ErrNotFound) {
+			if _, _, err := reconcile.EnqueueBackfill(ctx, s.DB, a, s.Now().Add(-a.Reconcile.BackfillLookback.D()), nil, 0, s.Now()); err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
+	}
+	s.add("reconcile_snapshots", &reconcile.Snapshots{DB: s.DB, Router: s.Router, Capturer: s.Capturer, GitHub: s.GitHub,
+		Tokens: s.Tokens, Installation: s.InstallationFor, Pressure: s.Guard, Log: s.Log, Metrics: s.Metrics, Now: s.Now,
+		Published: s.Dispatcher.Notify})
+	return nil
+}
