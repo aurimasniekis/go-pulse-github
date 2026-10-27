@@ -114,7 +114,7 @@ func (s *Service) addReconcile(ctx context.Context) error {
 		Capturer: s.Capturer, Interval: s.Cfg.GitHub.App.ReconcileInterval.D(), Log: s.Log, Metrics: s.Metrics, Now: s.Now,
 		Bind: s.bindAccount, Published: s.Dispatcher.Notify,
 		Requeue: func(ctx context.Context) {
-			if n, err := s.DB.RequeueUnrouted(ctx); err == nil && n > 0 && s.Processor != nil {
+			if n, err := s.DB.RequeueUnrouted(ctx, s.requeueLimit()); err == nil && n > 0 && s.Processor != nil {
 				s.Processor.Notify()
 			}
 		}})

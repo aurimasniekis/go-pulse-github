@@ -135,12 +135,15 @@ func (d *DB) InboxFailed(ctx context.Context, id int64, nextAt time.Time, class,
 	})
 }
 
-// RequeueUnrouted puts unrouted deliveries back into processing (after installations or configuration changed).
-func (d *DB) RequeueUnrouted(ctx context.Context) (int64, error) {
+// RequeueUnrouted puts at most limit unrouted deliveries back into processing, newest first (after installations or
+// configuration changed). Only deliveries that still have a body qualify; the retention sweep removes older ones, so
+// a requeue cannot resurrect weeks-old deliveries, and the limit keeps it from filling the inbox past admission.
+func (d *DB) RequeueUnrouted(ctx context.Context, limit int) (int64, error) {
 	var n int64
 	err := d.Tx(ctx, func(tx *Tx) error {
 		res, err := tx.exec(ctx, `UPDATE webhook_inbox SET state = 'pending', next_attempt_at = 0
-			WHERE state = 'unrouted' AND body IS NOT NULL`)
+			WHERE id IN (SELECT id FROM webhook_inbox WHERE state = 'unrouted' AND body IS NOT NULL
+			ORDER BY id DESC LIMIT ?)`, limit)
 		if err != nil {
 			return err
 		}

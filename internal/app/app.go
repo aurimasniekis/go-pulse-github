@@ -160,6 +160,12 @@ func New(ctx context.Context, cfg *config.Config, db *storage.DB, log *slog.Logg
 			s.Processor.Installations = s.AppAPI
 		}
 		s.Processor.Init()
+		// Routing may have changed since the last run (accounts, shares, filters): give unrouted deliveries another try.
+		if n, err := db.RequeueUnrouted(ctx, s.requeueLimit()); err != nil {
+			return nil, fmt.Errorf("requeue unrouted deliveries: %w", err)
+		} else if n > 0 {
+			log.Info("requeued unrouted webhook deliveries", "count", n)
+		}
 		s.Receiver = &webhook.Receiver{DB: db, Verifier: ver, MaxBody: int64(cfg.Webhook.MaxBodyBytes), Admission: s.Guard,
 			Metrics: m, Log: log.With(observability.FieldComponent, "webhook_receiver"), Now: now, Notify: s.Processor.Notify}
 		s.add("webhook_processor", s.Processor)
@@ -171,6 +177,9 @@ func New(ctx context.Context, cfg *config.Config, db *storage.DB, log *slog.Logg
 	s.add("retention", runnerFunc(s.retentionLoop))
 	return s, nil
 }
+
+// requeueLimit bounds one requeue of unrouted deliveries to half the inbox admission limit.
+func (s *Service) requeueLimit() int { return max(1, s.Cfg.Storage.MaxInboxPending/2) }
 
 type runnerFunc func(ctx context.Context) error
 

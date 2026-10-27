@@ -169,6 +169,44 @@ func TestSyncAccount(t *testing.T) {
 	}
 }
 
+// Unrouted deliveries follow processed-delivery retention, and a requeue takes only the newest that still have a body,
+// bounded by its limit.
+func TestUnroutedRetentionAndRequeue(t *testing.T) {
+	db := open(t)
+	ctx := context.Background()
+	for _, id := range []string{"a", "b", "c"} {
+		_, _ = db.InsertDelivery(ctx, Delivery{DeliveryID: id, Event: "e", Body: []byte(`{}`), ReceivedAt: time.Now()})
+	}
+	rows, _ := db.DueInbox(ctx, time.Now(), 10)
+	ages := []time.Duration{10 * 24 * time.Hour, time.Hour, time.Minute} // a: past retention
+	_ = db.Tx(ctx, func(tx *Tx) error {
+		for i, r := range rows {
+			if err := tx.MarkInbox(ctx, r.ID, InboxUnrouted, time.Now().Add(-ages[i])); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if _, err := db.Sweep(ctx, time.Now(), RetentionPolicy{Published: time.Hour, InboxProcessed: 7 * 24 * time.Hour,
+		Observations: 35 * 24 * time.Hour}); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := db.InboxByID(ctx, rows[0].ID); r == nil || r.Body != nil {
+		t.Fatalf("unrouted body past retention must be dropped: %+v", r)
+	}
+	n, err := db.RequeueUnrouted(ctx, 1)
+	if err != nil || n != 1 {
+		t.Fatalf("requeue %d %v", n, err)
+	}
+	due, _ := db.DueInbox(ctx, time.Now(), 10)
+	if len(due) != 1 || due[0].DeliveryID != "c" {
+		t.Fatalf("requeue must take the newest first: %+v", due)
+	}
+	if n, _ := db.RequeueUnrouted(ctx, 10); n != 1 {
+		t.Fatalf("only b still has a body: %d", n)
+	}
+}
+
 func TestSweepKeepsUnfinishedWork(t *testing.T) {
 	db := open(t)
 	ctx := context.Background()

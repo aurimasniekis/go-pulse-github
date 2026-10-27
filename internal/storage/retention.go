@@ -32,14 +32,16 @@ func (d *DB) Sweep(ctx context.Context, now time.Time, p RetentionPolicy) (Sweep
 			return err
 		}
 		r.Outbox, _ = res.RowsAffected()
-		res, err = tx.exec(ctx, `UPDATE webhook_inbox SET body = NULL WHERE state IN ('processed') AND body IS NOT NULL
-			AND processed_at < ?`, ms(now.Add(-p.InboxProcessed)))
+		// Unrouted deliveries follow the same retention as processed ones: they keep their body (for a requeue after
+		// routing changes) only as long as a processed delivery would.
+		res, err = tx.exec(ctx, `UPDATE webhook_inbox SET body = NULL WHERE state IN ('processed', 'unrouted')
+			AND body IS NOT NULL AND processed_at < ?`, ms(now.Add(-p.InboxProcessed)))
 		if err != nil {
 			return err
 		}
 		r.InboxBodies, _ = res.RowsAffected()
-		_, err = tx.exec(ctx, `DELETE FROM webhook_inbox WHERE state = 'processed' AND body IS NULL AND processed_at < ?`,
-			ms(now.Add(-p.Observations)))
+		_, err = tx.exec(ctx, `DELETE FROM webhook_inbox WHERE state IN ('processed', 'unrouted') AND body IS NULL
+			AND processed_at < ?`, ms(now.Add(-p.Observations)))
 		if err != nil {
 			return err
 		}
