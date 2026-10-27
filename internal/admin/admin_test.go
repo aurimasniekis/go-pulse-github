@@ -110,15 +110,20 @@ func TestGuardSizeCapCountsLiveData(t *testing.T) {
 	}
 }
 
-func TestShutdownClosesAdmission(t *testing.T) {
+// Shutdown closes readiness and pauses pollers, but a delivery whose body was still being read when SIGTERM arrived
+// must be stored: GitHub does not retry a 503. The listener's own shutdown stops new requests.
+func TestShutdownClosesReadinessNotAdmission(t *testing.T) {
 	db := testutil.OpenDB(t)
 	_ = db.WriteInstance(context.Background(), "test", "dev", time.Now())
 	g := NewGuard(db, GuardConfig{MaxInboxPending: 10}, nil, testutil.Logger(), time.Now)
 	g.FreeBytes = func(string) (uint64, error) { return 1 << 40, nil }
 	_ = g.Check(context.Background())
 	g.SetShuttingDown()
-	if !errors.Is(g.Admit(context.Background()), ErrShuttingDown) {
-		t.Fatal("admission must close during shutdown")
+	if code, _ := readyz(t, g); code != http.StatusServiceUnavailable || !errors.Is(g.Err(), ErrShuttingDown) || !g.Pressure() {
+		t.Fatal("readiness must close and pollers pause during shutdown")
+	}
+	if err := g.Admit(context.Background()); err != nil {
+		t.Fatalf("in-flight deliveries must still be admitted while storage is healthy: %v", err)
 	}
 }
 

@@ -134,7 +134,7 @@ quarantine replays all reuse the same publication ID.
 | Installation lookup fails | Retried with backoff. The delivery stays `pending`. |
 | Delivery matches no configured account | Stored as `unrouted`. It is requeued after installation reconciliation finds changes. |
 | Storage full or broken | Admission closes (503 and not ready), pollers pause, and the dispatcher keeps draining what was already stored. |
-| SIGTERM | Readiness and admission close. The webhook listener shuts down and lets in-flight requests finish their commit. Workers stop: publishes in flight complete, poll transactions roll back. NATS is drained and the WAL checkpointed. Everything unfinished resumes from SQLite on the next start. |
+| SIGTERM | Readiness closes and pollers pause. The webhook listener stops accepting connections; requests already being read are still admitted and committed while storage is healthy. Workers stop: publishes in flight complete, poll transactions roll back. NATS is drained and the WAL checkpointed. Everything unfinished resumes from SQLite on the next start. |
 
 ### Single active process
 

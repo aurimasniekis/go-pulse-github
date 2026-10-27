@@ -15,7 +15,7 @@ import (
 	"github.com/aurimasniekis/go-pulse-github/internal/storage"
 )
 
-// ErrShuttingDown is returned by Admit during shutdown.
+// ErrShuttingDown is reported by Err (readiness, pollers) during shutdown.
 var ErrShuttingDown = errors.New("shutting down")
 
 // GuardConfig sets storage thresholds.
@@ -136,26 +136,26 @@ func (g *Guard) Run(ctx context.Context, every time.Duration) error {
 	}
 }
 
-// Err returns the current admission problem (nil when open).
+// Err returns why the service is not ready: a storage problem, or shutdown (nil when ready).
 func (g *Guard) Err() error {
 	if g.shutting.Load() {
 		return ErrShuttingDown
 	}
+	return g.storageErr()
+}
+
+func (g *Guard) storageErr() error {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	return g.err
 }
 
-// Admit implements the webhook admission check.
-func (g *Guard) Admit(context.Context) error { return g.Err() }
+// Admit implements the webhook admission check. It depends on storage only: during shutdown the listener stops
+// accepting connections, and requests already being read must still be stored, because GitHub does not retry a 503.
+func (g *Guard) Admit(context.Context) error { return g.storageErr() }
 
 // Pressure reports whether collectors should pause fetching new data.
 func (g *Guard) Pressure() bool { return g.Err() != nil }
 
-// SetShuttingDown closes admission for shutdown.
-func (g *Guard) SetShuttingDown() {
-	g.shutting.Store(true)
-	if g.metrics != nil {
-		g.metrics.AdmissionOpen.Set(0)
-	}
-}
+// SetShuttingDown closes readiness and pauses pollers. Webhook admission stays open while the listener drains.
+func (g *Guard) SetShuttingDown() { g.shutting.Store(true) }
