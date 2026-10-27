@@ -19,6 +19,7 @@ const (
 	SourceReconcile     = "reconcile"
 	SourceEnrichment    = "enrichment"
 	SourceCollector     = "collector"
+	SourceAudit         = "audit"
 )
 
 // Collection modes.
