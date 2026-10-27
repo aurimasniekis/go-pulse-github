@@ -325,10 +325,8 @@ func (c *Client) waitForBudget(ctx context.Context, cred Credential, path string
 }
 
 func (c *Client) once(ctx context.Context, cred Credential, r Request, u *url.URL) (*Response, error) {
-	if err := c.sem.Acquire(ctx, 1); err != nil {
-		return nil, err
-	}
-	defer c.sem.Release(1)
+	// Authorize before taking a slot: an installation token refresh is itself a request through this client, and
+	// holding a slot while it waits for another one deadlocks once every slot is held by such a caller.
 	auth, err := cred.Authorization(ctx)
 	if err != nil {
 		if c.metrics != nil {
@@ -336,6 +334,10 @@ func (c *Client) once(ctx context.Context, cred Credential, r Request, u *url.UR
 		}
 		return nil, &Error{Class: ClassCredential, Message: err.Error(), Path: u.Path}
 	}
+	if err := c.sem.Acquire(ctx, 1); err != nil {
+		return nil, err
+	}
+	defer c.sem.Release(1)
 	var body io.Reader
 	if r.Body != nil {
 		body = bytes.NewReader(r.Body)

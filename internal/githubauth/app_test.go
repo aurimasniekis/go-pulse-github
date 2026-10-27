@@ -87,6 +87,31 @@ func TestInstallationTokens(t *testing.T) {
 	}
 }
 
+// An installation token refresh goes through the same client and its concurrency limit. A request on an
+// installation credential must not hold a slot while the refresh waits for one (deadlock with MaxConcurrent 1).
+func TestInstallationRequestWithOneSlot(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/app/installations/9/access_tokens":
+			_ = json.NewEncoder(w).Encode(map[string]any{"token": "ghs_x", "expires_at": time.Now().Add(time.Hour)})
+		case "/installation/repositories":
+			_, _ = w.Write([]byte(`{"total_count":0,"repositories":[]}`))
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer srv.Close()
+	pemBytes, _ := os.ReadFile(githubtest.AppKey(t))
+	key, _ := ParsePrivateKey(pemBytes)
+	gh, _ := githubapi.New(githubapi.Options{BaseURL: srv.URL, HTTPClient: srv.Client(), MaxConcurrent: 1})
+	tokens := NewInstallations(gh, NewApp(1, "", key, time.Now), time.Now)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := gh.Do(ctx, tokens.Credential(9, "installation:x"), githubapi.Request{URL: "/installation/repositories"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestPATRereadsRotatedFile(t *testing.T) {
 	p := t.TempDir() + "/token"
 	_ = os.WriteFile(p, []byte("one\n"), 0o600)
