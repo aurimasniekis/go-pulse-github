@@ -142,7 +142,7 @@ make e2e-pulse    # opt-in: real pulsed + NATS in Docker, client created through
 make site-dev     # documentation website with live reload
 ```
 
-The Pulse SDK requires Go 1.27.3. See [CONTRIBUTING.md](CONTRIBUTING.md).
+The Pulse SDK requires Go 1.27.4. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Status
 

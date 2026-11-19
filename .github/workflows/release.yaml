@@ -20,7 +20,7 @@ concurrency:
 
 env:
   GOTOOLCHAIN: local
-  GO_VERSION: "1.27.3"
+  GO_VERSION: "1.27.4"
   TRIVY_VERSION: v0.70.0
   DOCKERHUB_USER: aurimasniekis
   DOCKERHUB_IMAGE: docker.io/aurimasniekis/pulse-github

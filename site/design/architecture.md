@@ -28,7 +28,7 @@ existing Pulse deployment. It is headless: there is no UI, but it can listen for
 ## Upstream contracts (verified)
 
 All of these were read in `github.com/aurimasniekis/go-pulse` **v0.1.3** (commit `9aba53b5c8cf`). That version is
-pinned in `go.mod`. The Pulse module requires Go 1.27.3, so this module does too.
+pinned in `go.mod`. The Pulse module requires Go 1.27.4, so this module does too.
 
 | Contract | Source | What pulse-github relies on |
 |---|---|---|
