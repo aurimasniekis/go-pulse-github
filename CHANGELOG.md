@@ -7,7 +7,7 @@ versioning: [SemVer](https://semver.org/spec/v2.0.0.html), see [docs/releasing.m
 
 ### Changed
 - Bump `go-pulse` to v0.1.7, Go to 1.27.4 (module, CI and image) and `golang.org/x/net` to v0.63.0, which fixes
-  CVE-2026-78661.
+  CVE-2026-78661, and `klauspost/compress` to v1.20.2 (GO-2026-6865).
 
 ## [0.1.0] - 2026-10-27
 
