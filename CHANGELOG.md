@@ -6,8 +6,12 @@ versioning: [SemVer](https://semver.org/spec/v2.0.0.html), see [docs/releasing.m
 ## [Unreleased]
 
 ### Changed
-- Bump `go-pulse` to v0.1.7, Go to 1.27.4 (module, CI and image) and `golang.org/x/net` to v0.63.0, which fixes
-  CVE-2026-78661, and `klauspost/compress` to v1.20.2 (GO-2026-6865).
+- Bump `go-pulse` to v0.1.7 and Go to 1.27.4 (module, CI and image).
+
+### Security
+- GO-2026-6859 (`net/http`), fixed by Go 1.27.4. Reachable: the webhook receiver is an HTTP server.
+- CVE-2026-78661 (`golang.org/x/net`), fixed in v0.62.0, which is pulled in through `go-pulse` v0.1.7.
+- GO-2026-6865 (`klauspost/compress`), fixed by the bump to v1.20.2. Not reachable; a hygiene bump.
 
 ## [0.1.0] - 2026-10-27
 

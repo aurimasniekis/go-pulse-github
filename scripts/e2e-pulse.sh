@@ -6,7 +6,7 @@
 # Requires Docker (Compose v2), curl and Go. Uses host ports 14222 (NATS) and 18080 (admin API) on 127.0.0.1.
 set -euo pipefail
 
-PULSED_IMAGE=${PULSED_IMAGE:-ghcr.io/aurimasniekis/pulsed:0.1.3}
+PULSED_IMAGE=${PULSED_IMAGE:-ghcr.io/aurimasniekis/pulsed:0.1.7}
 NATS_IMAGE=${NATS_IMAGE:-nats:2.15.1-alpine@sha256:7ae34c25dfd6fe2e01c6483eabef20d796690fdcac6c4d94ca780a6cf9877fde}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 WORK=$(mktemp -d)

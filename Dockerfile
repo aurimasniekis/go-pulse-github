@@ -5,7 +5,7 @@
 #   build : static Go binary (CGO_ENABLED=0, pure-Go SQLite), cross-compiled on the build platform (no emulation).
 #   final : distroless static (Debian 13), non-root UID/GID 65532, no shell, CA certificates included.
 #
-# Base images are pinned by digest (the same digests go-pulse v0.1.3 uses). Update a digest with:
+# Base images are pinned by digest (the same digests go-pulse v0.1.7 uses). Update a digest with:
 #   docker buildx imagetools inspect <image>:<tag>
 #
 # Runtime layout:
