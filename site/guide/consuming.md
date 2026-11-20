@@ -35,7 +35,7 @@ Repository names never appear in subjects. To follow one repository, subscribe t
 
 ## Go example
 
-A complete program; it compiles against the Pulse SDK v0.1.3.
+A complete program; it compiles against the Pulse SDK v0.1.7.
 
 ```go
 package main

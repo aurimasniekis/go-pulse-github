@@ -19,7 +19,7 @@ existing Pulse deployment. It is headless: there is no UI, but it can listen for
                  │ account), checkpoints, notification/resource state, jobs, gaps, quarantine      │
                  └──────────────────────────────────────┬───────────────────────────────────────┘
                                                         ▼
-                                      outbox dispatcher (Pulse Go SDK v0.1.3)
+                                      outbox dispatcher (Pulse Go SDK v0.1.7)
                                       complete only after the JetStream ack
                                                         ▼
                                       Pulse NATS JetStream, stream EVENTS, evt.github.>
@@ -27,8 +27,8 @@ existing Pulse deployment. It is headless: there is no UI, but it can listen for
 
 ## Upstream contracts (verified)
 
-All of these were read in `github.com/aurimasniekis/go-pulse` **v0.1.3** (commit `9aba53b5c8cf`). That version is
-pinned in `go.mod`. The Pulse module requires Go 1.27.3, so this module does too.
+All of these were read in `github.com/aurimasniekis/go-pulse` **v0.1.7** (commit `c151ac1e1f01`), re-checked against the v0.1.3 reading: the only non-test change in `pkg/pulse` is the additive `Subscription.Drain` and a doc change on `Stop`, and `pkg/pulse/envelope`, `internal/streams` and `internal/natsauth` are unchanged. That version is
+pinned in `go.mod`. The Pulse module requires Go 1.27.4, so this module does too.
 
 | Contract | Source | What pulse-github relies on |
 |---|---|---|

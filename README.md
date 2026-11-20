@@ -142,14 +142,14 @@ make e2e-pulse    # opt-in: real pulsed + NATS in Docker, client created through
 make site-dev     # documentation website with live reload
 ```
 
-The Pulse SDK requires Go 1.27.3. See [CONTRIBUTING.md](CONTRIBUTING.md).
+The Pulse SDK requires Go 1.27.4. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Status
 
 **Release 0.1.0**, the first release; every release is listed in [CHANGELOG.md](CHANGELOG.md). Verified in this
 repository: unit and integration tests (including an embedded nats-server in
-operator mode with Pulse v0.1.3's `EVENTS` configuration and permissions, and a webhook → SQLite → SDK → JetStream run
-across a NATS outage), an end-to-end run against the real `pulsed` 0.1.3 image, and the image running read-only as
+operator mode with Pulse v0.1.7's `EVENTS` configuration and permissions, and a webhook → SQLite → SDK → JetStream run
+across a NATS outage), an end-to-end run against the real `pulsed` 0.1.7 image, and the image running read-only as
 uid 65532. Not verified: live GitHub credentials (GitHub behaviour is tested against a fake server built from the
 official documentation), GitHub Enterprise Server, and the audit-log query format.
 

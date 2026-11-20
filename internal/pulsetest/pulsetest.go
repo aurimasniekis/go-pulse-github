@@ -3,7 +3,7 @@
 // credentials whose permissions mirror Pulse's natsauth.Permissions.
 //
 // Pulse's own test harness lives in internal packages that other modules cannot import, so the parts this service
-// depends on are reproduced here from github.com/aurimasniekis/go-pulse v0.1.3 (commit 9aba53b5c8cf):
+// depends on are reproduced here from github.com/aurimasniekis/go-pulse v0.1.7 (commit c151ac1e1f01):
 // internal/natsauth/grants.go (Permissions, fixedPubDenies) and internal/streams/events.go (EventsConfig). If Pulse
 // changes them, update this file and the pinned version together.
 package pulsetest
@@ -87,7 +87,7 @@ func Start(t testing.TB, o Options) *Env {
 	if o.DuplicateWindow > 0 {
 		dup = o.DuplicateWindow
 	}
-	// streams.EventsConfig from Pulse v0.1.3 (max_bytes reduced for tests).
+	// streams.EventsConfig from Pulse v0.1.7 (max_bytes reduced for tests).
 	if _, err := js.CreateStream(ctx, jetstream.StreamConfig{
 		Name: "EVENTS", Subjects: []string{"evt.>"}, Retention: jetstream.LimitsPolicy, Storage: jetstream.FileStorage,
 		MaxMsgs: -1, MaxBytes: 256 << 20, MaxMsgSize: 1 << 20, MaxMsgsPerSubject: -1, Discard: jetstream.DiscardOld,
@@ -183,7 +183,7 @@ func (e *Env) Creds(clientID string, g Grants) (string, string) {
 	return p, clientID
 }
 
-// Permissions mirrors natsauth.Permissions (Pulse v0.1.3) for publish and blobs grants.
+// Permissions mirrors natsauth.Permissions (Pulse v0.1.7) for publish and blobs grants.
 func Permissions(clientID string, g Grants) jwt.Permissions {
 	pub := slices.Clone(g.Publish)
 	deny := []string{

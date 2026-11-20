@@ -8,7 +8,7 @@ and in the CHANGELOG `Security` section, and explain why.
 
 ## Development setup
 
-- Go: the version in `go.mod` (the Pulse SDK requires 1.27.3). CI uses `GOTOOLCHAIN=local` with exactly that version.
+- Go: the version in `go.mod` (the Pulse SDK requires 1.27.4). CI uses `GOTOOLCHAIN=local` with exactly that version.
 - `golangci-lint` v2, `govulncheck`, `gitleaks` (the Makefile runs the last two with `go run`).
 - Node 24 LTS with pnpm 10, for the documentation website (`site/`).
 - Docker, for the image and the opt-in `make e2e-pulse` run against a real Pulse.

@@ -5,7 +5,7 @@
 #   build : static Go binary (CGO_ENABLED=0, pure-Go SQLite), cross-compiled on the build platform (no emulation).
 #   final : distroless static (Debian 13), non-root UID/GID 65532, no shell, CA certificates included.
 #
-# Base images are pinned by digest (the same digests go-pulse v0.1.3 uses). Update a digest with:
+# Base images are pinned by digest (the same digests go-pulse v0.1.7 uses). Update a digest with:
 #   docker buildx imagetools inspect <image>:<tag>
 #
 # Runtime layout:
@@ -14,7 +14,7 @@
 #   /etc/pulse-github/config.yaml   configuration (mounted read-only)
 #   /run/secrets/*                  credentials (mounted read-only; never baked into the image)
 
-ARG GO_IMAGE=docker.io/library/golang:1.27.3-trixie@sha256:fbb7ae40b62ff8afe31662df570d39b4f5052ac32b90dae8e60d7657a20a74f4
+ARG GO_IMAGE=docker.io/library/golang:1.27.4-trixie@sha256:f18c3d73a184fb0582828510722e723b63a93f7188d11dd223d9be6f6880e65d
 ARG RUNTIME_IMAGE=gcr.io/distroless/static-debian13:nonroot@sha256:d62067879de890a1def9da0e7766b7d20810a5e5555cef8506b752437d7a3e88
 
 FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS build

@@ -7,7 +7,7 @@ on:
     inputs:
       pulsed_image:
         description: pulsed image to test against
-        default: ghcr.io/aurimasniekis/pulsed:0.1.3
+        default: ghcr.io/aurimasniekis/pulsed:0.1.7
   schedule:
     - cron: "17 4 * * 1"
 
@@ -16,7 +16,7 @@ permissions:
 
 env:
   GOTOOLCHAIN: local
-  GO_VERSION: "1.27.3"
+  GO_VERSION: "1.27.4"
 
 jobs:
   e2e:
@@ -30,5 +30,5 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
       - name: e2e against real Pulse
         env:
-          PULSED_IMAGE: ${{ inputs.pulsed_image || 'ghcr.io/aurimasniekis/pulsed:0.1.3' }}
+          PULSED_IMAGE: ${{ inputs.pulsed_image || 'ghcr.io/aurimasniekis/pulsed:0.1.7' }}
         run: ./scripts/e2e-pulse.sh
